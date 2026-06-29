@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/accents.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/stat_tiles.dart';
 import '../../shared/widgets.dart';
@@ -17,12 +16,13 @@ class FinanceHub extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final home = ref.watch(homeProvider);
     final h = home is ResData<HomeSummary> ? home.loaded.data : null;
-    final accents = Accents.of(context);
     final hasDue = h?.hasDue ?? false;
+    final scheme = context.scheme;
 
     return HubPage(
       title: 'Finance',
       header: StatRow(tiles: [
+        // Filled focal tile — orange when there's a due, blue when clear.
         StatTile(
           icon: hasDue ? Icons.error_outline : Icons.check_circle_outline,
           label: hasDue ? 'Due' : 'Balance',
@@ -31,22 +31,20 @@ class FinanceHub extends ConsumerWidget {
               : hasDue
                   ? bdt(h.dueAmount)
                   : 'Clear',
-          tone: hasDue ? context.status.badContainer : context.status.goodContainer,
-          onTone: hasDue ? context.status.bad : context.status.good,
+          accent: hasDue ? scheme.primary : scheme.secondary,
+          filled: true,
         ),
         StatTile(
           icon: Icons.account_balance_wallet_outlined,
           label: 'Total paid',
           value: h?.totalPaid != null ? bdt(h!.totalPaid) : '—',
-          tone: accents[1].background,
-          onTone: accents[1].foreground,
+          accent: scheme.secondary,
         ),
         StatTile(
           icon: Icons.savings_outlined,
           label: 'Waived',
           value: h?.totalWaived != null ? bdt(h!.totalWaived) : '—',
-          tone: accents[3].background,
-          onTone: accents[3].foreground,
+          accent: scheme.secondary,
         ),
       ]),
       groups: [

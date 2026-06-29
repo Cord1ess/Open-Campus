@@ -26,45 +26,56 @@ class ThemePrefs {
   bool get isBlack => mode == AppThemeMode.black;
 }
 
-/// Curated source colors the user can pick from. Each is chosen so
-/// `ColorScheme.fromSeed(vibrant)` produces a vivid, well-contrasting scheme in
-/// both light and dark; weak seeds that desaturate to mud or fail contrast were
-/// dropped. Orange stays the brand default.
+/// Source colors the user can pick. The first, [custom], is the dual-accent
+/// brand theme (orange + blue) and the default. Every other entry renders the
+/// SAME clean system (neutral surfaces, white cards) but with two shades of the
+/// one picked hue as the accents — fully automatic.
 class SeedSwatches {
-  static const orange = Color(0xFFF08700); // brand default
+  /// The Custom (default) seed — orange+blue brand scheme. Equals
+  /// AppColors.customSeed so the theme builder applies the dual accents.
+  static const custom = Color(0xFFFF8007);
+
   static const all = <(String, Color)>[
-    ('Orange', orange),
-    ('Amber', Color(0xFFE8A100)), // warm gold, richer than pale yellow
-    ('Coral', Color(0xFFF4511E)), // orange-red, energetic
-    ('Rose', Color(0xFFE53268)), // vivid pink-red
+    ('Custom', custom), // orange + blue dual-accent brand theme
+    ('Sky', Color(0xFF05BADD)),
+    ('Amber', Color(0xFFE8A100)),
+    ('Coral', Color(0xFFF4511E)),
+    ('Rose', Color(0xFFE53268)),
     ('Magenta', Color(0xFFC2185B)),
     ('Purple', Color(0xFF7C3AED)),
     ('Indigo', Color(0xFF4F46E5)),
     ('Blue', Color(0xFF2563EB)),
-    ('Sky', Color(0xFF0288D1)),
     ('Teal', Color(0xFF009688)),
     ('Emerald', Color(0xFF10916B)),
     ('Forest', Color(0xFF2E7D32)),
-    ('Slate', Color(0xFF546A7B)), // neutral, calm
+    ('Slate', Color(0xFF546A7B)),
   ];
 }
 
 class ThemeController extends StateNotifier<ThemePrefs> {
   ThemeController()
       : super(const ThemePrefs(
-            seed: SeedSwatches.orange, mode: AppThemeMode.light)) {
+            seed: SeedSwatches.custom, mode: AppThemeMode.light)) {
     _load();
   }
 
   static const _seedKey = 'oc_theme_seed';
   static const _modeKey = 'oc_theme_mode';
 
+  // Older brand seeds; migrate anyone still on them to the new Custom seed so
+  // they land on the refreshed orange+blue brand scheme.
+  static const _legacySeeds = <int>[0xFFF08700];
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final seedVal = prefs.getInt(_seedKey);
     final modeVal = prefs.getInt(_modeKey);
+    Color seed = seedVal != null ? Color(seedVal) : SeedSwatches.custom;
+    if (seedVal != null && _legacySeeds.contains(seedVal)) {
+      seed = SeedSwatches.custom;
+    }
     state = ThemePrefs(
-      seed: seedVal != null ? Color(seedVal) : SeedSwatches.orange,
+      seed: seed,
       mode: modeVal != null && modeVal < AppThemeMode.values.length
           ? AppThemeMode.values[modeVal]
           : AppThemeMode.light,

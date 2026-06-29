@@ -27,7 +27,9 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     return Scaffold(
-      backgroundColor: scheme.primary,
+      // Surface-colored so the native pre-splash, this screen, and the app read
+      // as one continuous background (no jarring full-color flash on reload).
+      backgroundColor: scheme.surface,
       body: Center(
         child: AnimatedBuilder(
           animation: _c,
@@ -40,21 +42,23 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Brand logo mark — orange tile with a blue gradient sheen
+                    // so the brand colors greet the user immediately.
                     Container(
                       width: 96,
                       height: 96,
                       decoration: BoxDecoration(
-                        color: scheme.onPrimary,
+                        color: AppColors.orange, // flat brand orange
                         borderRadius: BorderRadius.circular(Radii.xl),
                       ),
-                      child: Icon(Icons.school_rounded,
-                          size: 52, color: scheme.primary),
+                      child: const Icon(Icons.school_rounded,
+                          size: 52, color: Colors.white),
                     ),
                     const SizedBox(height: Spacing.xl),
                     Text(
                       'Open Campus',
                       style: context.text.headlineMedium
-                          ?.copyWith(color: scheme.onPrimary),
+                          ?.copyWith(color: scheme.onSurface),
                     ),
                     const SizedBox(height: Spacing.xxl),
                     SizedBox(
@@ -62,7 +66,7 @@ class _SplashScreenState extends State<SplashScreen>
                       height: 28,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
-                        color: scheme.onPrimary.withValues(alpha: 0.9),
+                        color: scheme.primary,
                       ),
                     ),
                   ],

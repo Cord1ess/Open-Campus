@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
+import '../common/collapsing_title.dart';
 import 'exam_routine_model.dart';
 
 /// Exam routines are published by UIU as Google Sheets, one per program. We list
@@ -19,7 +20,7 @@ class ExamRoutinePage extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('Exam Routine')),
+          SliverCollapsingAppBar(title: 'Exam Routine'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [

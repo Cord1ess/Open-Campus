@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/notifications/notification_service.dart';
@@ -37,6 +38,18 @@ class OpenCampusApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeControllerProvider);
+    final isDark = theme.materialMode == ThemeMode.dark;
+    // Transparent system bars whose icons match the theme, so the Android
+    // status & navigation bars blend into the app background as one continuous
+    // surface (no separate brand-colored bar).
+    final overlay = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+    );
     return MaterialApp(
       title: 'Open Campus',
       debugShowCheckedModeBanner: false,
@@ -48,9 +61,12 @@ class OpenCampusApp extends ConsumerWidget {
       builder: (context, child) {
         final mq = MediaQuery.of(context);
         final clamped = mq.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.15);
-        return MediaQuery(
-          data: mq.copyWith(textScaler: clamped),
-          child: child!,
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: overlay,
+          child: MediaQuery(
+            data: mq.copyWith(textScaler: clamped),
+            child: child!,
+          ),
         );
       },
       home: const _Root(),

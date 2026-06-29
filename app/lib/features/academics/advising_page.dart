@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
+import '../common/collapsing_title.dart';
 import 'advising_model.dart';
 
 /// Pre-advising: courses offered for next-term registration and courses already
@@ -21,7 +22,7 @@ class AdvisingPage extends ConsumerWidget {
         onRefresh: () => ref.read(advisingProvider.notifier).load(),
         child: CustomScrollView(
           slivers: [
-            const SliverAppBar.large(title: Text('Pre-Advising')),
+            SliverCollapsingAppBar(title: 'Pre-Advising'),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [

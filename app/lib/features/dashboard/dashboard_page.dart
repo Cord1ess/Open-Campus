@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/accents.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/avatar.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets.dart';
+import '../academics/calendar_model.dart';
+import '../academics/calendar_page.dart';
 import '../academics/class_routine_page.dart';
 import '../auth/auth_controller.dart';
 import '../profile/profile_page.dart';
@@ -57,16 +58,19 @@ class DashboardPage extends ConsumerWidget {
         onRefresh: () => _refresh(ref),
         child: CustomScrollView(
           slivers: [
+            // Sticky header: logo + reload + profile. Stays pinned on scroll.
+            _StickyHeaderBar(
+              avatarBytes: avatarBytes,
+              onProfile: () => Navigator.of(context)
+                  .push(sharedAxisRoute(const ProfilePage())),
+              onReload: () => _refresh(ref),
+            ),
             SliverToBoxAdapter(
               child: _Hero(
                 roll: roll,
                 home: homeData,
-                avatarBytes: avatarBytes,
                 results: results,
                 attendance: attendance,
-                onProfile: () => Navigator.of(context)
-                    .push(sharedAxisRoute(const ProfilePage())),
-                onReload: () => _refresh(ref),
               ),
             ),
             if (expired)
@@ -121,23 +125,93 @@ class DashboardPage extends ConsumerWidget {
   }
 }
 
+/// "Monday, 30 June 2026" — formatted without the intl package.
+String _formatToday(DateTime d) {
+  const days = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
+/// The semester card's big title — prefer the human name ("Spring 2026"); fall
+/// back to the code, then a dash.
+String _termTitle(Term? t) {
+  final name = t?.name?.trim();
+  if (name != null && name.isNotEmpty) return name;
+  final code = t?.code?.trim();
+  if (code != null && code.isNotEmpty) return code;
+  return '—';
+}
+
+/// The sticky top bar (logo + reload + profile) pinned above the dashboard.
+/// Built on a pinned SliverAppBar so height/clipping are handled correctly
+/// (a hand-rolled SliverPersistentHeader delegate is error-prone to size).
+class _StickyHeaderBar extends StatelessWidget {
+  final List<int>? avatarBytes;
+  final VoidCallback onProfile;
+  final Future<void> Function() onReload;
+  const _StickyHeaderBar({
+    required this.avatarBytes,
+    required this.onProfile,
+    required this.onReload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return SliverAppBar(
+      pinned: true,
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
+      automaticallyImplyLeading: false,
+      titleSpacing: Spacing.lg,
+      toolbarHeight: 64,
+      title: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+            child:
+                Icon(Icons.school_rounded, size: 18, color: scheme.onPrimary),
+          ),
+          const SizedBox(width: Spacing.sm),
+          Text('Open Campus',
+              style: context.text.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+          const Spacer(),
+          _ReloadButton(onReload: onReload),
+          const SizedBox(width: Spacing.sm),
+          SpringTap(
+            onTap: onProfile,
+            borderRadius: BorderRadius.circular(999),
+            child: Avatar(bytes: avatarBytes, radius: 22),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Hero extends StatelessWidget {
   final String? roll;
   final HomeSummary? home;
-  final List<int>? avatarBytes;
   final ResourceState<ResultsData> results;
   final ResourceState<AttendanceData> attendance;
-  final VoidCallback onProfile;
-  final Future<void> Function() onReload;
 
   const _Hero({
     required this.roll,
     required this.home,
-    required this.avatarBytes,
     required this.results,
     required this.attendance,
-    required this.onProfile,
-    required this.onReload,
   });
 
   ResultsData? get _r => results is ResData<ResultsData>
@@ -157,6 +231,13 @@ class _Hero extends StatelessWidget {
         r?.latestCgpa ??
         (r != null && r.semesters.isNotEmpty ? r.semesters.first.cgpa : null);
     final att = a != null ? overallAttendancePct(a) : null;
+    final attended = a != null ? attendedClasses(a) : null;
+    final totalCls = a != null ? totalClasses(a) : null;
+    final credits = home?.completedCredits;
+    final currentTerm = home?.currentTerm;
+    final nextTerm = home?.nextTerms.isNotEmpty == true
+        ? home!.nextTerms.first
+        : null;
 
     // Real name from /student/home; greeting falls back gracefully while
     // loading or if the backend sends an empty name (treat blank as absent).
@@ -164,82 +245,70 @@ class _Hero extends StatelessWidget {
     final hasName = realName != null && realName.isNotEmpty;
     final firstName =
         hasName ? realName.split(' ').first : (roll != null ? 'Student' : 'Welcome');
-    final avatar = avatarBytes;
-    // Distinct-but-harmonized accent tones derived from the seed, so the three
-    // hero cards each get their own on-theme color (not the same two repeated).
-    final accents = Accents.of(context);
 
     return Container(
       color: scheme.surface,
-      padding: EdgeInsets.fromLTRB(Spacing.lg,
-          MediaQuery.of(context).padding.top + Spacing.lg, Spacing.lg, Spacing.xl),
+      // The sticky header occupies the top; start the greeting just below it.
+      padding: const EdgeInsets.fromLTRB(
+          Spacing.lg, Spacing.sm, Spacing.lg, Spacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: BorderRadius.circular(Radii.sm),
-                ),
-                child: Icon(Icons.school_rounded,
-                    size: 18, color: scheme.onPrimary),
-              ),
-              const SizedBox(width: Spacing.sm),
-              Text('Open Campus',
-                  style: context.text.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-              const Spacer(),
-              // Reload: safely re-fetches all dashboard data (read-only).
-              _ReloadButton(onReload: onReload),
-              const SizedBox(width: Spacing.sm),
-              SpringTap(
-                onTap: onProfile,
-                borderRadius: BorderRadius.circular(999),
-                child: Avatar(bytes: avatar, radius: 22),
-              ),
-            ],
-          ),
-          const SizedBox(height: Spacing.xl),
           Text(hasName ? 'Welcome back,' : 'Welcome',
               style: context.text.bodyMedium
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           Text(firstName,
               style: context.text.headlineMedium
                   ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          // Today's date in the accent color (blue on the default theme).
+          Text(_formatToday(DateTime.now()),
+              style: context.text.titleSmall?.copyWith(
+                  color: scheme.secondary, fontWeight: FontWeight.w700)),
           const SizedBox(height: Spacing.xl),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Card 1 — current semester (filled blue).
                 Expanded(
-                    child: _SemesterCard(
-                        tone: accents[0],
-                        current: home?.currentTerm,
-                        next: home?.nextTerms.isNotEmpty == true
-                            ? home!.nextTerms.first
-                            : null)),
-              const SizedBox(width: Spacing.md),
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.workspace_premium,
-                  label: 'CGPA',
-                  value: cgpa?.toStringAsFixed(2) ?? '—',
-                  tone: accents[2].background,
-                  onTone: accents[2].foreground,
+                  child: _HeroCard(
+                    icon: Icons.calendar_today_rounded,
+                    caption: 'Current term',
+                    bigValue: _termTitle(currentTerm),
+                    subLabel: 'Next',
+                    subValue: nextTerm?.code ?? nextTerm?.name ?? '—',
+                    filled: true,
+                    accent: scheme.secondary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: Spacing.md),
+                const SizedBox(width: Spacing.md),
+                // Card 2 — CGPA (filled orange).
                 Expanded(
-                  child: _StatCard(
+                  child: _HeroCard(
+                    icon: Icons.workspace_premium,
+                    caption: 'CGPA',
+                    bigValue: cgpa?.toStringAsFixed(2) ?? '—',
+                    subLabel: 'Credits',
+                    subValue: credits?.toStringAsFixed(0) ?? '—',
+                    filled: true,
+                    accent: scheme.primary,
+                  ),
+                ),
+                const SizedBox(width: Spacing.md),
+                // Card 3 — attendance (clean white card).
+                Expanded(
+                  child: _HeroCard(
                     icon: Icons.event_available,
-                    label: 'Attendance',
-                    value: att != null ? '${att.toStringAsFixed(0)}%' : '—',
-                    tone: accents[4].background,
-                    onTone: accents[4].foreground,
+                    caption: 'Attendance',
+                    bigValue:
+                        att != null ? '${att.toStringAsFixed(0)}%' : '—',
+                    subLabel: 'Classes',
+                    subValue: (attended != null && totalCls != null)
+                        ? '$attended/$totalCls'
+                        : '—',
+                    filled: false,
+                    accent: scheme.secondary,
                   ),
                 ),
               ],
@@ -357,33 +426,159 @@ class _DashboardBody extends StatelessWidget {
       onRetry: onRetryAttendance,
     );
 
-    if (Breakpoints.isDesktop(context)) {
-      // Two balanced columns. Heavier/visual cards on the left.
-      final left = <Widget>[today, payment, resultsCard];
-      final right = <Widget>[notices, advisor, attendanceCard];
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: _StaggerColumn(children: left)),
-          const SizedBox(width: Spacing.lg),
-          Expanded(child: _StaggerColumn(baseDelay: 60, children: right)),
-        ],
-      );
-    }
+    final body = Breakpoints.isDesktop(context)
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                  child: _StaggerColumn(
+                      children: [today, payment, resultsCard])),
+              const SizedBox(width: Spacing.lg),
+              Expanded(
+                  child: _StaggerColumn(
+                      baseDelay: 60,
+                      children: [notices, advisor, attendanceCard])),
+            ],
+          )
+        : _StaggerColumn(children: [
+            today,
+            payment,
+            advisor,
+            notices,
+            resultsCard,
+            attendanceCard,
+          ]);
 
-    // Phone/tablet: single staggered column, original order.
-    return _StaggerColumn(children: [
-      today,
-      payment,
-      advisor,
-      notices,
-      resultsCard,
-      attendanceCard,
-    ]);
+    // Upcoming spans full width, above the rest of the dashboard cards.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const FadeSlideIn(child: _UpcomingCard()),
+        const SizedBox(height: Spacing.lg),
+        body,
+      ],
+    );
   }
 }
 
-/// A vertical stack of cards each fading/sliding in with an increasing delay.
+/// Wide "Upcoming" card: shows the next academic-calendar event computed from
+/// today's date, and links to the full calendar.
+class _UpcomingCard extends ConsumerWidget {
+  const _UpcomingCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = context.scheme;
+    final async = ref.watch(academicCalendarProvider);
+
+    void openCalendar() => Navigator.of(context)
+        .push(sharedAxisRoute(const CalendarPage()));
+
+    final cal = async.asData?.value.defaultCalendar;
+    final next = cal?.nextEvent;
+
+    return SpringTap(
+      onTap: openCalendar,
+      borderRadius: BorderRadius.circular(Radii.lg),
+      child: Container(
+        padding: const EdgeInsets.all(Spacing.xl),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.event_note_outlined, size: 20, color: scheme.primary),
+                const SizedBox(width: Spacing.sm),
+                Text('Upcoming', style: context.text.titleMedium),
+                const Spacer(),
+                if (cal != null)
+                  Text(cal.term,
+                      style: context.text.labelMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: Spacing.lg),
+            if (async.isLoading)
+              const CardSkeleton(lines: 2)
+            else if (next != null)
+              _UpcomingEvent(next)
+            else
+              Text(
+                async.hasError
+                    ? 'Couldn\'t load the academic calendar.'
+                    : 'No upcoming events.',
+                style: context.text.bodyMedium
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            const SizedBox(height: Spacing.lg),
+            Row(
+              children: [
+                Text('Show academic calendar',
+                    style: context.text.labelLarge?.copyWith(
+                        color: scheme.primary, fontWeight: FontWeight.w700)),
+                Icon(Icons.chevron_right, size: 20, color: scheme.primary),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UpcomingEvent extends StatelessWidget {
+  final CalendarEvent e;
+  const _UpcomingEvent(this.e);
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final n = DateTime.now();
+    final days = e.date.difference(DateTime(n.year, n.month, n.day)).inDays;
+    final when = days <= 0
+        ? 'Today'
+        : days == 1
+            ? 'Tomorrow'
+            : 'In $days days';
+
+    return Row(
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: scheme.secondary,
+            borderRadius: BorderRadius.circular(Radii.md),
+          ),
+          child: Icon(e.icon, color: Colors.white, size: 22),
+        ),
+        const SizedBox(width: Spacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(e.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('${e.dateText}  ·  $when',
+                  style: context.text.bodySmall
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _StaggerColumn extends StatelessWidget {
   final List<Widget> children;
   final int baseDelay;
@@ -406,24 +601,40 @@ class _StaggerColumn extends StatelessWidget {
   }
 }
 
-/// Current trimester (big) + next registration trimester (small). Real data
-/// from /student/home; shows em-dashes while loading.
-class _SemesterCard extends StatelessWidget {
-  final Term? current;
-  final Term? next;
-  final AccentTone tone;
-  const _SemesterCard({required this.tone, this.current, this.next});
+/// A hero stat card with a big title (+ optional big value) and a small
+/// subtitle line (label : value). [filled] = solid accent background with white
+/// text; otherwise a clean white card with a hairline border and accent chips.
+/// A uniform hero stat card. Every card has the same vertical rhythm — an icon
+/// chip up top, a big focal area in the middle (either [bigValue] text or a
+/// custom [center] widget like a ring), and a small caption line at the bottom
+/// — so the three sit balanced side by side.
+class _HeroCard extends StatelessWidget {
+  final IconData icon;
+  final String caption; // small top label, e.g. "Current term" / "CGPA"
+  final String? bigValue; // big focal text (term name / CGPA / attendance %)
+  final String subLabel;
+  final String subValue;
+  final bool filled;
+  final Color accent;
+  const _HeroCard({
+    required this.icon,
+    required this.caption,
+    required this.subLabel,
+    required this.subValue,
+    required this.filled,
+    required this.accent,
+    this.bigValue,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final bg = tone.background;
-    final fg = tone.foreground;
-    // Prefer the numeric code as the headline; if a user's term has no code,
-    // fall back to showing the name big so the card is never just a dash.
-    final hasCode = current?.code != null && current!.code!.isNotEmpty;
-    final currentCode = hasCode ? current!.code! : (current?.name ?? '—');
-    final currentName = hasCode ? (current?.name ?? 'Semester') : '';
-    final nextCode = next?.code ?? next?.name;
+    final scheme = context.scheme;
+    final bg = filled ? accent : scheme.surface;
+    final fg = filled ? Colors.white : scheme.onSurface;
+    final dim = filled
+        ? Colors.white.withValues(alpha: 0.85)
+        : scheme.onSurfaceVariant;
+    final iconBg = filled ? Colors.white.withValues(alpha: 0.20) : accent;
 
     return SpringTap(
       child: Container(
@@ -431,98 +642,51 @@ class _SemesterCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(Radii.lg),
+          border: filled ? null : Border.all(color: scheme.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: fg.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.calendar_today, size: 16, color: fg),
+            // Top: icon chip + caption.
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration:
+                      BoxDecoration(color: iconBg, shape: BoxShape.circle),
+                  child: Icon(icon, size: 14, color: Colors.white),
+                ),
+                const SizedBox(width: Spacing.sm),
+                Expanded(
+                  child: Text(caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.labelSmall?.copyWith(
+                          color: dim, fontWeight: FontWeight.w700)),
+                ),
+              ],
             ),
-            const SizedBox(height: Spacing.lg),
+            const SizedBox(height: Spacing.md),
+            // Big focal value, left-aligned.
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(currentCode,
+              child: Text(bigValue ?? '—',
                   maxLines: 1,
-                  style: context.text.headlineMedium?.copyWith(
-                      color: fg, fontWeight: FontWeight.w800, height: 1.0)),
+                  style: context.text.headlineSmall?.copyWith(
+                      color: fg, fontWeight: FontWeight.w800, height: 1.05)),
             ),
-            const SizedBox(height: 2),
-            Text(currentName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.labelMedium
-                    ?.copyWith(color: fg.withValues(alpha: 0.85))),
-            const SizedBox(height: 2),
-            Text(nextCode != null ? 'Next: $nextCode' : ' ',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.labelSmall
-                    ?.copyWith(color: fg.withValues(alpha: 0.7))),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color tone;
-  final Color onTone;
-  const _StatCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.tone,
-    required this.onTone,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SpringTap(
-      child: Container(
-        padding: const EdgeInsets.all(Spacing.lg),
-        decoration: BoxDecoration(
-          color: tone,
-          borderRadius: BorderRadius.circular(Radii.lg),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: onTone.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 16, color: onTone),
-            ),
-            const SizedBox(height: Spacing.lg),
-            // Value scales to fit its card — never overflows on narrow screens.
+            const SizedBox(height: Spacing.sm),
+            // Bottom: small caption line.
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(value,
+              child: Text('$subLabel: $subValue',
                   maxLines: 1,
-                  style: context.text.headlineMedium?.copyWith(
-                      color: onTone,
-                      fontWeight: FontWeight.w800,
-                      height: 1.0)),
+                  style: context.text.labelSmall?.copyWith(
+                      color: dim, fontWeight: FontWeight.w600)),
             ),
-            const SizedBox(height: 2),
-            Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.labelMedium
-                    ?.copyWith(color: onTone.withValues(alpha: 0.85))),
           ],
         ),
       ),

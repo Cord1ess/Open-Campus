@@ -26,7 +26,8 @@ class AppearanceSettings extends ConsumerWidget {
               style: context.text.labelLarge
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           const SizedBox(height: 2),
-          Text('Everything else is shaded from this one color.',
+          Text('Custom is the orange + blue brand theme. Any other color themes '
+              'the app automatically in two shades of that color.',
               style: context.text.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           const SizedBox(height: Spacing.md),
@@ -38,6 +39,8 @@ class AppearanceSettings extends ConsumerWidget {
                 _Swatch(
                   name: name,
                   color: color,
+                  // The Custom swatch shows a diagonal orange/blue split.
+                  custom: color.toARGB32() == SeedSwatches.custom.toARGB32(),
                   selected: prefs.seed.toARGB32() == color.toARGB32(),
                   onTap: () => controller.setSeed(color),
                 ),
@@ -62,12 +65,14 @@ class _Swatch extends StatelessWidget {
   final String name;
   final Color color;
   final bool selected;
+  final bool custom;
   final VoidCallback onTap;
   const _Swatch({
     required this.name,
     required this.color,
     required this.selected,
     required this.onTap,
+    this.custom = false,
   });
 
   @override
@@ -82,7 +87,17 @@ class _Swatch extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: color,
+          // Custom: diagonal orange/blue split. Others: the flat swatch color.
+          color: custom ? null : color,
+          gradient: custom
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.orange, AppColors.orange, AppColors.blue,
+                      AppColors.blue],
+                  stops: [0.0, 0.5, 0.5, 1.0],
+                )
+              : null,
           shape: BoxShape.circle,
           border: Border.all(
             color: selected ? scheme.onSurface : Colors.transparent,
@@ -98,8 +113,6 @@ class _Swatch extends StatelessWidget {
         ),
         child: selected
             ? Icon(Icons.check,
-                // Contrast against the swatch itself (white check is invisible
-                // on light swatches like lime/yellow).
                 color: color.computeLuminance() > 0.5
                     ? Colors.black
                     : Colors.white,

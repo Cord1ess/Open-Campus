@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/collapsing_title.dart';
 
 /// Faculty schedules — pick a faculty member to see their class times,
 /// counselling (office) hours, and room. Data isn't pulled from UCAM yet; the
@@ -56,7 +57,7 @@ class _FacultySchedulePageState extends State<FacultySchedulePage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('Faculty Schedules')),
+          SliverCollapsingAppBar(title: 'Faculty Schedules'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [

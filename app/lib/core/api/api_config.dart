@@ -16,6 +16,9 @@ class ApiConfig {
   /// pass --dart-define and aren't on a local-dev platform default below).
   static const String _hosted = 'https://open-campus-sdsw.onrender.com';
 
+  /// The official UCAM portal (for the About page's "open the real site" link).
+  static const String ucamUrl = 'https://ucam.uiu.ac.bd';
+
   static const String _override =
       String.fromEnvironment('OC_API_BASE', defaultValue: '');
 

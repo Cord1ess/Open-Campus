@@ -2,13 +2,24 @@ import 'package:flutter/material.dart';
 
 /// Open Campus — Material 3 design system.
 ///
-/// We let Material 3 do the heavy lifting: a single seed color generates the full
-/// tonal palette (primary / secondary / tertiary + their containers, plus the
-/// surface tones used for elevation). We theme components with M3 roles rather
-/// than hard-coded colors, so light/dark and contrast come for free.
+/// The look is a clean, restrained one: pure white / neutral-dark surfaces with
+/// color used only as deliberate accents. Surfaces are ALWAYS neutral (never
+/// tinted by the seed); the picked color only drives the two accent shades.
+///   - Custom (default): orange + blue dual accents (the brand look).
+///   - Any other swatch: two shades (light + dark) of that one hue.
 class AppColors {
-  /// The brand seed — UIU orange. The whole scheme is derived from this.
-  static const seed = Color(0xFFF08700);
+  /// Brand orange — primary accent of the Custom theme.
+  static const orange = Color(0xFFFF8007);
+
+  /// Brand blue — secondary accent of the Custom theme.
+  static const blue = Color(0xFF05BADD);
+
+  /// Sentinel seed meaning "the Custom orange+blue brand scheme". Picked colors
+  /// equal to this trigger the dual orange/blue accents instead of one hue.
+  static const customSeed = Color(0xFFFF8007);
+
+  /// Default seed.
+  static const seed = customSeed;
 }
 
 /// Semantic status colors (M3 has no built-in success/warning, so we define a
@@ -89,14 +100,20 @@ class AppTheme {
   /// [black] = AMOLED/pitch-black: pure #000 surfaces over the dark scheme.
   static ThemeData _build(Brightness brightness,
       {Color seed = AppColors.seed, bool black = false}) {
-    // `vibrant` keeps the seed saturated (the default algorithm desaturates a
-    // vivid orange into a muddy brown). Material 3 derives a harmonized
-    // secondary/tertiary/surface set around whichever source color is chosen.
+    // Resolve the two accents:
+    //   Custom  → orange + blue (the brand dual-accent look).
+    //   else    → two shades (a brighter + a deeper) of the picked hue.
+    final (accentA, accentB) = seed == AppColors.customSeed
+        ? (AppColors.orange, AppColors.blue)
+        : _shadesOf(seed);
+
+    // Always neutral surfaces; accents injected on top. Start from a fromSeed
+    // scheme only to get sensible error/shadow roles, then override the rest.
     var scheme = ColorScheme.fromSeed(
       seedColor: seed,
       brightness: brightness,
-      dynamicSchemeVariant: DynamicSchemeVariant.vibrant,
     );
+    scheme = _cleanScheme(scheme, brightness, accentA, accentB);
 
     // Pitch-black: collapse the dark scheme's grey surfaces to true black,
     // keeping just enough separation for cards to read on OLED.
@@ -108,6 +125,8 @@ class AppTheme {
         surfaceContainer: const Color(0xFF121212),
         surfaceContainerHigh: const Color(0xFF1A1A1A),
         surfaceContainerHighest: const Color(0xFF222222),
+        outline: const Color(0xFF2A2A2A),
+        outlineVariant: const Color(0xFF1C1C1C),
       );
     }
 
@@ -121,30 +140,36 @@ class AppTheme {
     return base.copyWith(
       textTheme: _typography(base.textTheme, scheme),
       pageTransitionsTheme: const PageTransitionsTheme(builders: {
-        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        // Predictive back (Android 14+): dragging back peeks/animates the
+        // outgoing page. Falls back to a normal forward transition elsewhere.
+        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
         TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
       }),
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
-        surfaceTintColor: scheme.surfaceTint,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 3,
+        scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: base.textTheme.titleLarge?.copyWith(
             color: scheme.onSurface, fontWeight: FontWeight.w600),
       ),
+      // White cards with a hairline border (clean, reference-style) — color is
+      // reserved for deliberate accent cards, not the default card surface.
       cardTheme: CardThemeData(
         color: scheme.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.lg)),
+          borderRadius: BorderRadius.circular(Radii.lg),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
         margin: EdgeInsets.zero,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surfaceContainer,
-        indicatorColor: scheme.secondaryContainer,
-        elevation: 3,
+        backgroundColor: scheme.surface,
+        indicatorColor: scheme.primary.withValues(alpha: 0.14),
+        elevation: 0,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         height: 72,
       ),
@@ -191,6 +216,86 @@ class AppTheme {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm)),
       ),
+    );
+  }
+
+  /// Two harmonized accent shades from a single picked hue: a brighter "A"
+  /// (used like the orange/primary slot) and a deeper, slightly hue-shifted "B"
+  /// (used like the blue/secondary slot). Keeps a two-tone feel from one color.
+  static (Color, Color) _shadesOf(Color seed) {
+    final hsl = HSLColor.fromColor(seed);
+    final a = hsl
+        .withSaturation((hsl.saturation * 1.05).clamp(0.0, 1.0))
+        .withLightness(0.52)
+        .toColor();
+    // B leans a touch toward the next hue and goes deeper, so the two accents
+    // read as related but distinct (not just light/dark of the exact same swatch).
+    final b = hsl
+        .withHue((hsl.hue + 18) % 360)
+        .withSaturation((hsl.saturation * 0.95).clamp(0.0, 1.0))
+        .withLightness(0.40)
+        .toColor();
+    return (a, b);
+  }
+
+  /// Applies the clean Open Campus scheme: NEUTRAL white/dark surfaces (no seed
+  /// tint anywhere) with [accentA] (primary) and [accentB] (secondary/tertiary)
+  /// as the only colors. Surfaces are identical across every theme — only the
+  /// accents change — so the look stays consistent whatever color is picked.
+  static ColorScheme _cleanScheme(ColorScheme scheme, Brightness brightness,
+      Color accentA, Color accentB) {
+    if (brightness == Brightness.light) {
+      return scheme.copyWith(
+        primary: accentA,
+        onPrimary: Colors.white,
+        primaryContainer: accentA,
+        onPrimaryContainer: Colors.white,
+        secondary: accentB,
+        onSecondary: Colors.white,
+        secondaryContainer: accentB,
+        onSecondaryContainer: Colors.white,
+        tertiary: accentB,
+        onTertiary: Colors.white,
+        tertiaryContainer: accentB,
+        onTertiaryContainer: Colors.white,
+        // Pure neutral surfaces — white background, white cards, soft grey tints.
+        surface: Colors.white,
+        onSurface: const Color(0xFF14181F),
+        onSurfaceVariant: const Color(0xFF5B6470),
+        surfaceContainerLowest: Colors.white,
+        surfaceContainerLow: Colors.white,
+        surfaceContainer: const Color(0xFFF4F6F8),
+        surfaceContainerHigh: const Color(0xFFEEF1F4),
+        surfaceContainerHighest: const Color(0xFFE9EDF1),
+        outline: const Color(0xFFD3D9DF),
+        outlineVariant: const Color(0xFFE7EBEF),
+        surfaceTint: Colors.transparent,
+      );
+    }
+    return scheme.copyWith(
+      primary: accentA,
+      onPrimary: Colors.white,
+      primaryContainer: accentA,
+      onPrimaryContainer: Colors.white,
+      secondary: accentB,
+      onSecondary: Colors.white,
+      secondaryContainer: accentB,
+      onSecondaryContainer: Colors.white,
+      tertiary: accentB,
+      onTertiary: Colors.white,
+      tertiaryContainer: accentB,
+      onTertiaryContainer: Colors.white,
+      surface: const Color(0xFF0E1116),
+      onSurface: const Color(0xFFE9EDF1),
+      onSurfaceVariant: const Color(0xFF9AA4B0),
+      surfaceContainerLowest: const Color(0xFF0B0E12),
+      surfaceContainerLow: const Color(0xFF14181E),
+      surfaceContainer: const Color(0xFF181D24),
+      surfaceContainerHigh: const Color(0xFF1F252D),
+      surfaceContainerHighest: const Color(0xFF272E37),
+      outline: const Color(0xFF39414B),
+      outlineVariant: const Color(0xFF252B33),
+      surfaceTint: Colors.transparent,
     );
   }
 

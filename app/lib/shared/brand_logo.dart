@@ -15,9 +15,7 @@ class BrandLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final fg = onColor ? scheme.onPrimary : scheme.primary;
-    final bg = onColor ? scheme.onPrimary.withValues(alpha: 0.15) : scheme.primaryContainer;
-    final iconColor = onColor ? scheme.onPrimary : scheme.onPrimaryContainer;
+    final fg = onColor ? scheme.onPrimary : scheme.onSurface;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -26,11 +24,11 @@ class BrandLogo extends StatelessWidget {
           width: size,
           height: size,
           decoration: BoxDecoration(
-            color: bg,
+            color: AppColors.orange, // flat brand orange
             borderRadius: BorderRadius.circular(size * 0.28),
           ),
-          // Placeholder glyph — represents the combined mark.
-          child: Icon(Icons.school_rounded, size: size * 0.52, color: iconColor),
+          child: Icon(Icons.school_rounded,
+              size: size * 0.52, color: Colors.white),
         ),
         SizedBox(height: size * 0.18),
         Text(

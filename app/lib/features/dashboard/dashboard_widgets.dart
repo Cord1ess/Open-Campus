@@ -13,6 +13,14 @@ double? overallAttendancePct(AttendanceData a) {
   return held == 0 ? null : present / held * 100;
 }
 
+/// Total classes attended across all courses.
+int attendedClasses(AttendanceData a) =>
+    a.courses.fold<int>(0, (s, c) => s + c.present);
+
+/// Total classes held across all courses.
+int totalClasses(AttendanceData a) =>
+    a.courses.fold<int>(0, (s, c) => s + c.totalHeld);
+
 Color attendanceColor(BuildContext context, double pct) {
   if (pct >= 85) return context.status.good;
   if (pct >= 70) return context.status.warn;

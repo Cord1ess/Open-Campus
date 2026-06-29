@@ -4,6 +4,7 @@ import '../../core/api/api_client.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets.dart';
 import '../academics/advising_model.dart';
+import '../academics/calendar_model.dart';
 import '../academics/course_history_model.dart';
 import '../academics/exam_routine_model.dart';
 import '../academics/marks_model.dart';
@@ -246,6 +247,22 @@ final examRoutineProvider = FutureProvider<ExamRoutineData>((ref) async {
     ApiUnauthorized() => throw Exception('Session ended. Please log in again.'),
     ApiSessionExpired() => throw Exception('UCAM session expired.'),
     ApiUnavailable(:final message) => throw Exception(message),
+  };
+});
+
+/// Public academic calendar (scraped from UIU, cached server-side). Read-only
+/// and not per-student, so a plain FutureProvider is fine.
+final academicCalendarProvider =
+    FutureProvider<AcademicCalendarData>((ref) async {
+  final api = ref.read(apiClientProvider);
+  final res = await api.getJson<AcademicCalendarData>(
+    '/calendar/academic',
+    (j) => AcademicCalendarData.fromJson(j as Map<String, dynamic>),
+  );
+  return switch (res) {
+    ApiOk(:final data) => data,
+    ApiUnavailable(:final message) => throw Exception(message),
+    _ => const AcademicCalendarData(calendars: []),
   };
 });
 

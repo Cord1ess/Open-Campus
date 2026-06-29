@@ -6,6 +6,7 @@ import '../../shared/trend_chart.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
+import '../common/collapsing_title.dart';
 import 'course_history_model.dart';
 
 /// Full academic record: degree progress, CGPA, and every course grouped by
@@ -22,7 +23,7 @@ class CourseHistoryPage extends ConsumerWidget {
         onRefresh: () => ref.read(courseHistoryProvider.notifier).load(),
         child: CustomScrollView(
           slivers: [
-            const SliverAppBar.large(title: Text('Course History')),
+            SliverCollapsingAppBar(title: 'Course History'),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [

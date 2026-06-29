@@ -128,6 +128,10 @@ class _SpringTapState extends State<SpringTap>
 
   @override
   Widget build(BuildContext context) {
+    // No tap handler → nothing to animate; pass the child straight through so
+    // decorative wrappers don't run an idle controller + gesture detector.
+    if (widget.onTap == null) return widget.child;
+
     Widget child = widget.child;
     if (widget.borderRadius != null && widget.onTap != null) {
       child = Material(
@@ -201,35 +205,53 @@ class StaggerList extends StatelessWidget {
   }
 }
 
-/// Shared-axis (X) transition for card → detail navigation: the incoming page
-/// slides in from the right while fading in; the outgoing page slides slightly
-/// left and fades back. On reverse both invert, so motion always reads as moving
-/// forward/backward along one axis rather than a generic fade.
-Route<T> sharedAxisRoute<T>(Widget page) {
-  const inCurve = Cubic(0.05, 0.7, 0.1, 1.0); // emphasized decelerate
-  return PageRouteBuilder<T>(
-    transitionDuration: const Duration(milliseconds: 420),
-    reverseTransitionDuration: const Duration(milliseconds: 340),
-    pageBuilder: (_, __, ___) => page,
-    transitionsBuilder: (_, anim, secondary, child) {
-      final entering = CurvedAnimation(parent: anim, curve: inCurve);
-      // Outgoing (this page being covered) drifts left + dims.
-      final leaving = CurvedAnimation(parent: secondary, curve: inCurve);
-      return FadeTransition(
-        opacity: entering,
+/// Card → detail navigation route.
+///
+/// On Android it defers to the app's [PageTransitionsTheme] so the system's
+/// **predictive back** gesture (Android 14+) drives the transition — dragging
+/// back peeks/animates the page away natively. On every other platform it uses
+/// a shared-axis (X) transition: the incoming page slides in from the right and
+/// fades in; the outgoing page drifts left and dims.
+Route<T> sharedAxisRoute<T>(Widget page) => _SharedAxisRoute<T>(page);
+
+class _SharedAxisRoute<T> extends PageRouteBuilder<T> {
+  _SharedAxisRoute(this.page)
+      : super(
+          transitionDuration: const Duration(milliseconds: 420),
+          reverseTransitionDuration: const Duration(milliseconds: 340),
+          pageBuilder: (_, __, ___) => page,
+        );
+
+  final Widget page;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Android: let the theme's transition (PredictiveBackPageTransitionsBuilder)
+    // handle it so the predictive back gesture is honored.
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      final builder = Theme.of(context).pageTransitionsTheme;
+      return builder.buildTransitions<T>(
+          this, context, animation, secondaryAnimation, child);
+    }
+    // Elsewhere: the custom shared-axis look.
+    const inCurve = Cubic(0.05, 0.7, 0.1, 1.0); // emphasized decelerate
+    final entering = CurvedAnimation(parent: animation, curve: inCurve);
+    final leaving = CurvedAnimation(parent: secondaryAnimation, curve: inCurve);
+    return FadeTransition(
+      opacity: entering,
+      child: SlideTransition(
+        position: Tween(begin: const Offset(0.10, 0), end: Offset.zero)
+            .animate(entering),
         child: SlideTransition(
-          position: Tween(begin: const Offset(0.10, 0), end: Offset.zero)
-              .animate(entering),
-          child: SlideTransition(
-            position: Tween(begin: Offset.zero, end: const Offset(-0.06, 0))
-                .animate(leaving),
-            child: FadeTransition(
-              opacity: Tween(begin: 1.0, end: 0.85).animate(leaving),
-              child: child,
-            ),
+          position: Tween(begin: Offset.zero, end: const Offset(-0.06, 0))
+              .animate(leaving),
+          child: FadeTransition(
+            opacity: Tween(begin: 1.0, end: 0.85).animate(leaving),
+            child: child,
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }

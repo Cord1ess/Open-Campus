@@ -6,6 +6,7 @@ import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
 import '../dashboard/resource_view.dart';
+import '../common/collapsing_title.dart';
 
 const _dayOrder = [
   'Saturday',
@@ -29,7 +30,7 @@ class ClassRoutinePage extends ConsumerWidget {
         onRefresh: () => ref.read(homeProvider.notifier).load(),
         child: CustomScrollView(
           slivers: [
-            const SliverAppBar.large(title: Text('Class Routine')),
+            SliverCollapsingAppBar(title: 'Class Routine'),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [

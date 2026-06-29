@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/accents.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/stat_tiles.dart';
 import '../../shared/widgets.dart';
 import '../academics/advising_page.dart';
@@ -30,7 +30,7 @@ class AcademicsHub extends ConsumerWidget {
         ? attendance.loaded.data
         : null;
     final att = a != null ? overallAttendancePct(a) : null;
-    final accents = Accents.of(context);
+    final scheme = context.scheme;
 
     return HubPage(
       title: 'Academics',
@@ -39,22 +39,20 @@ class AcademicsHub extends ConsumerWidget {
           icon: Icons.workspace_premium,
           label: 'CGPA',
           value: h?.cgpa?.toStringAsFixed(2) ?? '—',
-          tone: accents[0].background,
-          onTone: accents[0].foreground,
+          accent: scheme.primary,
+          filled: true,
         ),
         StatTile(
           icon: Icons.event_available,
           label: 'Attendance',
           value: att != null ? '${att.toStringAsFixed(0)}%' : '—',
-          tone: accents[2].background,
-          onTone: accents[2].foreground,
+          accent: scheme.secondary,
         ),
         StatTile(
           icon: Icons.school_outlined,
           label: 'Credits',
           value: h?.completedCredits?.toStringAsFixed(0) ?? '—',
-          tone: accents[4].background,
-          onTone: accents[4].foreground,
+          accent: scheme.secondary,
         ),
       ]),
       groups: [

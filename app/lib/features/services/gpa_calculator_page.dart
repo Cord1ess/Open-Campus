@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../academics/course_history_model.dart';
 import '../dashboard/dashboard_controller.dart';
+import '../common/collapsing_title.dart';
 
 /// GPA tools: a goal projection (what you need to reach a target CGPA), a
 /// course-by-course trimester planner, and the UIU grade reference chart.
@@ -27,7 +28,7 @@ class _GpaCalculatorPageState extends ConsumerState<GpaCalculatorPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('GPA Tools')),
+          SliverCollapsingAppBar(title: 'GPA Tools'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [

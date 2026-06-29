@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// Kind of academic-calendar entry — drives the icon/color.
+/// Kind of academic-calendar entry — drives the icon/color. Inferred from the
+/// event text since the source is free-form.
 enum CalendarEventType { registration, payment, exam, holiday, classDay, other }
 
 class CalendarEvent {
   final String id;
   final String title;
-  final String? detail;
-  final DateTime date;
+  final String? detail; // the day label, e.g. "Sat-Mon"
+  final DateTime date; // start date
+  final DateTime? endDate; // for multi-day ranges
+  final String dateText; // raw, e.g. "Jul 4 - 6, 2026"
   final CalendarEventType type;
 
   const CalendarEvent({
@@ -15,12 +18,18 @@ class CalendarEvent {
     required this.title,
     this.detail,
     required this.date,
+    this.endDate,
+    this.dateText = '',
     this.type = CalendarEventType.other,
   });
 
-  bool get isPast => date.isBefore(DateTime.now());
+  /// Whether the event (or its whole range) is already over.
+  bool get isPast {
+    final n = DateTime.now();
+    return (endDate ?? date).isBefore(DateTime(n.year, n.month, n.day));
+  }
 
-  /// A stable integer id for the notification system (hash of the string id).
+  /// A stable integer id for the notification system.
   int get notificationId => id.hashCode & 0x7fffffff;
 
   IconData get icon => switch (type) {
@@ -31,70 +40,106 @@ class CalendarEvent {
         CalendarEventType.classDay => Icons.menu_book_outlined,
         CalendarEventType.other => Icons.event_outlined,
       };
+
+  factory CalendarEvent.fromJson(Map<String, dynamic> j) {
+    final event = (j['event'] ?? '').toString();
+    final start = _parseIso(j['start_date']) ?? DateTime(1970);
+    return CalendarEvent(
+      id: '${j['start_date'] ?? ''}|$event',
+      title: event,
+      detail: (j['day'] ?? '').toString(),
+      date: start,
+      endDate: _parseIso(j['end_date']),
+      dateText: (j['date_text'] ?? '').toString(),
+      type: _inferType(event),
+    );
+  }
 }
 
-/// Placeholder calendar until the per-term academic calendar is captured.
-/// Dates are relative to "now" so the UI always shows a sensible mix of
-/// upcoming/past. TODO(data): replace with the real calendar feed.
-List<CalendarEvent> sampleCalendar(DateTime now) {
-  DateTime d(int offsetDays) =>
-      DateTime(now.year, now.month, now.day).add(Duration(days: offsetDays));
-  return [
-    CalendarEvent(
-      id: 'reg-open',
-      title: 'Registration opens',
-      detail: 'Summer 2026 course registration begins',
-      date: d(-10),
-      type: CalendarEventType.registration,
-    ),
-    CalendarEvent(
-      id: 'inst-1',
-      title: '1st installment deadline',
-      detail: 'Pay 40% of tuition + trimester fee to avoid a ৳500 fine',
-      date: d(3),
-      type: CalendarEventType.payment,
-    ),
-    CalendarEvent(
-      id: 'classes-begin',
-      title: 'Classes begin',
-      detail: 'First day of Summer 2026 classes',
-      date: d(7),
-      type: CalendarEventType.classDay,
-    ),
-    CalendarEvent(
-      id: 'inst-2',
-      title: '2nd installment deadline',
-      detail: 'Pay up to 70% of tuition + trimester fee',
-      date: d(30),
-      type: CalendarEventType.payment,
-    ),
-    CalendarEvent(
-      id: 'midterm',
-      title: 'Mid-term exams',
-      detail: 'Mid-term examination week',
-      date: d(45),
-      type: CalendarEventType.exam,
-    ),
-    CalendarEvent(
-      id: 'inst-3',
-      title: '3rd installment deadline',
-      detail: 'Pay 100% of tuition + trimester fee',
-      date: d(55),
-      type: CalendarEventType.payment,
-    ),
-    CalendarEvent(
-      id: 'holiday',
-      title: 'Eid holiday',
-      detail: 'University closed',
-      date: d(60),
-      type: CalendarEventType.holiday,
-    ),
-    CalendarEvent(
-      id: 'final',
-      title: 'Final exams',
-      detail: 'Final examination week',
-      date: d(80),
-      type: CalendarEventType.exam,
-    ),
-  ];
+DateTime? _parseIso(dynamic v) =>
+    v is String && v.isNotEmpty ? DateTime.tryParse(v) : null;
+
+CalendarEventType _inferType(String text) {
+  final t = text.toLowerCase();
+  if (t.contains('registration') || t.contains('advising') || t.contains('add/drop') || t.contains('withdraw')) {
+    return CalendarEventType.registration;
+  }
+  if (t.contains('payment') || t.contains('installment') || t.contains('fee') || t.contains('fine') || t.contains('tuition')) {
+    return CalendarEventType.payment;
+  }
+  if (t.contains('exam') || t.contains('mid-term') || t.contains('midterm') || t.contains('final')) {
+    return CalendarEventType.exam;
+  }
+  if (t.contains('holiday') || t.contains('eid') || t.contains('closed') || t.contains('vacation') || t.contains('puja') || t.contains('break')) {
+    return CalendarEventType.holiday;
+  }
+  if (t.contains('class') || t.contains('semester begin') || t.contains('classes begin')) {
+    return CalendarEventType.classDay;
+  }
+  return CalendarEventType.other;
+}
+
+/// One academic calendar (a term + program) with its events.
+class AcademicCalendar {
+  final String title;
+  final String term; // "Spring 2026"
+  final String program; // "Undergraduate"
+  final bool revised;
+  final List<CalendarEvent> events;
+
+  const AcademicCalendar({
+    required this.title,
+    required this.term,
+    required this.program,
+    required this.revised,
+    required this.events,
+  });
+
+  factory AcademicCalendar.fromJson(Map<String, dynamic> j) => AcademicCalendar(
+        title: (j['title'] ?? '').toString(),
+        term: (j['term'] ?? '').toString(),
+        program: (j['program'] ?? '').toString(),
+        revised: j['revised'] == true,
+        events: ((j['events'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((e) => CalendarEvent.fromJson(e.cast<String, dynamic>()))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date)),
+      );
+
+  /// The next upcoming event (range not yet over). Null if all are past.
+  CalendarEvent? get nextEvent {
+    for (final e in events) {
+      if (!e.isPast) return e;
+    }
+    return null;
+  }
+}
+
+class AcademicCalendarData {
+  final List<AcademicCalendar> calendars;
+  const AcademicCalendarData({required this.calendars});
+
+  factory AcademicCalendarData.fromJson(Map<String, dynamic> j) =>
+      AcademicCalendarData(
+        calendars: ((j['calendars'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((e) => AcademicCalendar.fromJson(e.cast<String, dynamic>()))
+            .toList(),
+      );
+
+  /// The best default calendar: prefer an Undergraduate one whose range covers
+  /// today (or the nearest upcoming), else the first Undergraduate, else first.
+  AcademicCalendar? get defaultCalendar {
+    if (calendars.isEmpty) return null;
+    final ug = calendars
+        .where((c) => c.program.toLowerCase().contains('undergrad'))
+        .toList();
+    final pool = ug.isNotEmpty ? ug : calendars;
+    // Prefer the first one with an upcoming event (the current/next term).
+    for (final c in pool) {
+      if (c.nextEvent != null) return c;
+    }
+    return pool.first;
+  }
 }

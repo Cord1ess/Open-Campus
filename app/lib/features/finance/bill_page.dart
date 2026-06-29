@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
+import '../common/collapsing_title.dart';
 import 'bill_model.dart';
 
 /// Full bill: live balance hero + itemized charges and payments grouped by
@@ -22,7 +23,7 @@ class BillPage extends ConsumerWidget {
         onRefresh: () => ref.read(billProvider.notifier).load(),
         child: CustomScrollView(
           slivers: [
-            const SliverAppBar.large(title: Text('Bill & Payments')),
+            SliverCollapsingAppBar(title: 'Bill & Payments'),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [

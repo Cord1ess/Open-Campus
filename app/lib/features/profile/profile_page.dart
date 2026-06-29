@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/avatar.dart';
 import '../../shared/widgets.dart';
+import '../about/about_page.dart';
 import '../auth/auth_controller.dart';
+import '../common/collapsing_title.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
-import 'appearance_settings.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -24,7 +25,18 @@ class ProfilePage extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('Profile')),
+          SliverCollapsingAppBar(
+            title: 'Profile',
+            actions: [
+              IconButton(
+                onPressed: () => Navigator.of(context)
+                    .push(sharedAxisRoute(const AboutPage())),
+                tooltip: 'Settings',
+                iconSize: 26,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ],
+          ),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [
@@ -57,11 +69,6 @@ class ProfilePage extends ConsumerWidget {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: Spacing.lg),
-              const FadeSlideIn(
-                delayMs: 110,
-                child: AppearanceSettings(),
               ),
               const SizedBox(height: Spacing.lg),
               FadeSlideIn(

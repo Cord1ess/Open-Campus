@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/collapsing_title.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_widgets.dart';
 import 'models.dart';
@@ -19,10 +20,7 @@ class AttendancePage extends ConsumerWidget {
         onRefresh: () => ref.read(attendanceProvider.notifier).load(),
         child: CustomScrollView(
           slivers: [
-            const SliverAppBar.large(
-              title: Text('Attendance'),
-              floating: true,
-            ),
+            const SliverCollapsingAppBar(title: 'Attendance'),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [

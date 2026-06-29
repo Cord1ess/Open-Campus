@@ -30,6 +30,15 @@ class ApiUnavailable<T> extends ApiResult<T> {
   const ApiUnavailable(this.message);
 }
 
+/// Liveness of the backend, as reported by [ApiClient.healthCheck].
+enum ServerState { online, waking, offline }
+
+class ServerStatus {
+  final ServerState state;
+  final int? latencyMs;
+  const ServerStatus(this.state, {this.latencyMs});
+}
+
 /// Thin wrapper over dio. Injects the bearer token; maps status codes to
 /// ApiResult so screens never deal with raw HTTP.
 class ApiClient {
@@ -66,6 +75,39 @@ class ApiClient {
       await _dio.get('/health',
           options: Options(receiveTimeout: const Duration(seconds: 60)));
     } catch (_) {/* best effort */}
+  }
+
+  /// Pings /health and reports the server status with round-trip latency.
+  /// Distinguishes "online", "waking" (slow first response on a free tier),
+  /// and "offline". Used by the About page's status indicator.
+  Future<ServerStatus> healthCheck() async {
+    final sw = Stopwatch()..start();
+    try {
+      final r = await _dio.get('/health',
+          options: Options(
+            receiveTimeout: const Duration(seconds: 8),
+            sendTimeout: const Duration(seconds: 8),
+          ));
+      sw.stop();
+      if (r.statusCode == 200) {
+        // A slow first response usually means it just woke from sleep.
+        final state = sw.elapsedMilliseconds > 3000
+            ? ServerState.waking
+            : ServerState.online;
+        return ServerStatus(state, latencyMs: sw.elapsedMilliseconds);
+      }
+      return const ServerStatus(ServerState.offline);
+    } on DioException catch (e) {
+      sw.stop();
+      // A timeout on the first hit is most likely a cold start, not a true down.
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return const ServerStatus(ServerState.waking);
+      }
+      return const ServerStatus(ServerState.offline);
+    } catch (_) {
+      return const ServerStatus(ServerState.offline);
+    }
   }
 
   /// POST /auth/login — returns the token on success. Retries once on a pure

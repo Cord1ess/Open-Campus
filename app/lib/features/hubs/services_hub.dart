@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/accents.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../common/coming_soon_page.dart';
@@ -104,7 +103,6 @@ class _ServicesHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accents = Accents.of(context);
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,8 +112,7 @@ class _ServicesHeader extends StatelessWidget {
               icon: Icons.calculate_outlined,
               title: 'GPA Tools',
               subtitle: 'Plan & project',
-              tone: accents[1].background,
-              onTone: accents[1].foreground,
+              accent: context.scheme.primary,
               onTap: () => onGpa(context),
             ),
           ),
@@ -125,8 +122,7 @@ class _ServicesHeader extends StatelessWidget {
               icon: Icons.people_outline,
               title: 'Faculty',
               subtitle: 'Schedules',
-              tone: accents[4].background,
-              onTone: accents[4].foreground,
+              accent: context.scheme.secondary,
               onTap: () => onFaculty(context),
             ),
           ),
@@ -140,15 +136,13 @@ class _ActionTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Color tone;
-  final Color onTone;
+  final Color accent;
   final VoidCallback onTap;
   const _ActionTile({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.tone,
-    required this.onTone,
+    required this.accent,
     required this.onTap,
   });
 
@@ -160,20 +154,20 @@ class _ActionTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(Spacing.lg),
         decoration: BoxDecoration(
-          color: tone,
+          color: accent, // bold filled accent tile
           borderRadius: BorderRadius.circular(Radii.lg),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: onTone),
+            Icon(icon, color: Colors.white),
             const SizedBox(height: Spacing.md),
             Text(title,
                 style: context.text.titleMedium?.copyWith(
-                    color: onTone, fontWeight: FontWeight.w800)),
+                    color: Colors.white, fontWeight: FontWeight.w800)),
             Text(subtitle,
                 style: context.text.labelMedium
-                    ?.copyWith(color: onTone.withValues(alpha: 0.85))),
+                    ?.copyWith(color: Colors.white.withValues(alpha: 0.85))),
           ],
         ),
       ),

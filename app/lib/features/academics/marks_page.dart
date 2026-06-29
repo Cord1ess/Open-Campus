@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
+import '../common/collapsing_title.dart';
 import 'marks_model.dart';
 
 /// Item-wise marks: pick a trimester, then see each course's assessment
@@ -27,7 +28,7 @@ class _MarksPageState extends ConsumerState<MarksPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('Marks')),
+          SliverCollapsingAppBar(title: 'Marks'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [

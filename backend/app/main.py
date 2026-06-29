@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, settings as settings_api, student
+from app.api import auth, calendar as calendar_api, settings as settings_api, student
 from app.auth import session_store
 from app.config import settings
 
@@ -63,6 +63,7 @@ if settings.cors_origins:
 app.include_router(auth.router)
 app.include_router(settings_api.router)
 app.include_router(student.router)
+app.include_router(calendar_api.router)
 
 
 @app.get("/health", tags=["meta"])

@@ -231,3 +231,26 @@ class ExamRoutineLink(BaseModel):
 
 class ExamRoutineResponse(BaseModel):
     routines: list[ExamRoutineLink] = []
+
+
+# --- Academic calendar (public UIU page; shared, cached, not per-student) ---
+
+class CalendarEvent(BaseModel):
+    date_text: str                  # raw, e.g. "Jul 4 - 6, 2026"
+    day: str                        # e.g. "Sat-Mon"
+    event: str
+    start_date: str | None = None   # ISO yyyy-mm-dd
+    end_date: str | None = None     # ISO
+
+
+class AcademicCalendar(BaseModel):
+    title: str
+    term: str                       # e.g. "Spring 2026"
+    program: str                    # e.g. "Undergraduate"
+    revised: bool = False
+    events: list[CalendarEvent] = []
+
+
+class AcademicCalendarResponse(BaseModel):
+    calendars: list[AcademicCalendar] = []
+    fetched_at: str | None = None   # ISO timestamp of the server-side fetch

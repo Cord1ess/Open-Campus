@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/theme_controller.dart';
 import '../../shared/brand_logo.dart';
 import '../../shared/widgets.dart';
+import '../about/about_page.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -86,162 +89,177 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  void _openAbout() {
+    Navigator.of(context).push(sharedAxisRoute(const AboutPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
+    // Force the default Custom light theme so the entry screen is always
+    // on-brand, regardless of a previously saved preference.
+    final theme =
+        const ThemePrefs(seed: SeedSwatches.custom, mode: AppThemeMode.light)
+            .light;
+    return Theme(
+      data: theme,
+      child: Builder(builder: (context) => Scaffold(body: _layout(context))),
+    );
+  }
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Soft tonal backdrop.
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [scheme.primaryContainer, scheme.surface],
-                stops: const [0, 0.45],
+  /// Centered login column at all widths.
+  Widget _layout(BuildContext context) {
+    final scheme = context.scheme;
+    return Stack(
+      children: [
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(Spacing.xl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SpringIn(child: BrandLogo(size: 96)),
+                  const SizedBox(height: Spacing.sm),
+                  Text('Sign in with your UCAM account',
+                      textAlign: TextAlign.center,
+                      style: context.text.bodyMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: Spacing.xxl),
+                  _loginCard(context),
+                  const SizedBox(height: Spacing.xl),
+                  _disclaimer(context),
+                ],
               ),
             ),
           ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(Spacing.xl),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+        ),
+        // Settings entry point (opens the About & status page).
+        Positioned(
+          top: 0,
+          right: 0,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(Spacing.sm),
+              child: IconButton(
+                onPressed: _openAbout,
+                tooltip: 'Settings',
+                iconSize: 28,
+                color: scheme.onSurfaceVariant,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _disclaimer(BuildContext context) => Text(
+        'A cleaner, faster window into UCAM. Your data is fetched live from your '
+        'own account — your password is never stored, and nothing is kept on our '
+        'servers. Open Campus is an independent, unofficial app.',
+        textAlign: TextAlign.center,
+        style: context.text.labelSmall
+            ?.copyWith(color: context.scheme.onSurfaceVariant, height: 1.5),
+      );
+
+  Widget _loginCard(BuildContext context) {
+    final scheme = context.scheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Spacing.lg),
+        child: Column(
+          children: [
+            TextField(
+              controller: _id,
+              decoration: const InputDecoration(
+                labelText: 'Student ID',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+              keyboardType: TextInputType.number,
+              enabled: !_busy,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: Spacing.md),
+            TextField(
+              controller: _pw,
+              obscureText: _obscure,
+              enabled: !_busy,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscure
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: Spacing.xs),
+            // Remember-me: saves credentials on THIS device only,
+            // for 30 days. No server involvement.
+            InkWell(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              onTap:
+                  _busy ? null : () => setState(() => _remember = !_remember),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+                child: Row(
                   children: [
-                    const SpringIn(child: BrandLogo(size: 96)),
-                    const SizedBox(height: Spacing.sm),
-                    Text('Sign in with your UCAM account',
-                        textAlign: TextAlign.center,
-                        style: context.text.bodyMedium
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
-                    const SizedBox(height: Spacing.xxl),
-
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(Spacing.lg),
-                        child: Column(
-                          children: [
-                            TextField(
-                              controller: _id,
-                              decoration: const InputDecoration(
-                                labelText: 'Student ID',
-                                prefixIcon: Icon(Icons.badge_outlined),
-                              ),
-                              keyboardType: TextInputType.number,
-                              enabled: !_busy,
-                              textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: Spacing.md),
-                            TextField(
-                              controller: _pw,
-                              obscureText: _obscure,
-                              enabled: !_busy,
-                              decoration: InputDecoration(
-                                labelText: 'Password',
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_obscure
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined),
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
-                                ),
-                              ),
-                              onSubmitted: (_) => _submit(),
-                            ),
-                            const SizedBox(height: Spacing.xs),
-                            // Remember-me: saves credentials on THIS device only,
-                            // for 30 days. No server involvement.
-                            InkWell(
-                              borderRadius: BorderRadius.circular(Radii.sm),
-                              onTap: _busy
-                                  ? null
-                                  : () =>
-                                      setState(() => _remember = !_remember),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: Spacing.xs),
-                                child: Row(
-                                  children: [
-                                    Checkbox(
-                                      value: _remember,
-                                      onChanged: _busy
-                                          ? null
-                                          : (v) => setState(
-                                              () => _remember = v ?? false),
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    const SizedBox(width: Spacing.xs),
-                                    Expanded(
-                                      child: Text(
-                                        'Keep me signed in on this device for 30 days',
-                                        style: context.text.bodySmall?.copyWith(
-                                            color: context
-                                                .scheme.onSurfaceVariant),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            AnimatedSize(
-                              duration: Motion.fast,
-                              child: _error == null
-                                  ? const SizedBox(width: double.infinity)
-                                  : Padding(
-                                      padding: const EdgeInsets.only(
-                                          top: Spacing.md),
-                                      child: _ErrorBanner(_error!),
-                                    ),
-                            ),
-                            const SizedBox(height: Spacing.lg),
-                            FilledButton(
-                              onPressed: _busy ? null : _submit,
-                              child: Text(_busy ? 'Signing in…' : 'Sign in'),
-                            ),
-                            AnimatedSize(
-                              duration: Motion.fast,
-                              child: !_slowHint
-                                  ? const SizedBox(width: double.infinity)
-                                  : Padding(
-                                      padding: const EdgeInsets.only(
-                                          top: Spacing.md),
-                                      child: Text(
-                                        'Waking up the server — first sign-in '
-                                        'after a while can take up to a minute.',
-                                        textAlign: TextAlign.center,
-                                        style: context.text.bodySmall?.copyWith(
-                                            color: scheme.onSurfaceVariant),
-                                      ),
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    Checkbox(
+                      value: _remember,
+                      onChanged: _busy
+                          ? null
+                          : (v) => setState(() => _remember = v ?? false),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-
-                    const SizedBox(height: Spacing.xl),
-                    Text(
-                      'A cleaner, faster window into UCAM. Your data is fetched '
-                      'live from your own account — your password is never stored, '
-                      'and nothing is kept on our servers. Open Campus is an '
-                      'independent, unofficial app.',
-                      textAlign: TextAlign.center,
-                      style: context.text.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant, height: 1.5),
+                    const SizedBox(width: Spacing.xs),
+                    Expanded(
+                      child: Text(
+                        'Keep me signed in on this device for 30 days',
+                        style: context.text.bodySmall
+                            ?.copyWith(color: context.scheme.onSurfaceVariant),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
-        ],
+            AnimatedSize(
+              duration: Motion.fast,
+              child: _error == null
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: Spacing.md),
+                      child: _ErrorBanner(_error!),
+                    ),
+            ),
+            const SizedBox(height: Spacing.lg),
+            FilledButton(
+              onPressed: _busy ? null : _submit,
+              child: Text(_busy ? 'Signing in…' : 'Sign in'),
+            ),
+            AnimatedSize(
+              duration: Motion.fast,
+              child: !_slowHint
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: Spacing.md),
+                      child: Text(
+                        'Waking up the server — first sign-in '
+                        'after a while can take up to a minute.',
+                        textAlign: TextAlign.center,
+                        style: context.text.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

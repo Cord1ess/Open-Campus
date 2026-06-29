@@ -1,37 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/collapsing_title.dart';
+import '../dashboard/dashboard_controller.dart';
+import '../dashboard/resource_view.dart';
 import 'calendar_model.dart';
+import 'google_calendar.dart';
 
-/// Academic calendar — a timeline of term events. Each upcoming event can have a
-/// reminder toggled on, which schedules an on-device notification the morning of
-/// the event. Data is scaffolded; the plumbing is real.
-class CalendarPage extends StatefulWidget {
+/// Academic calendar — live from UIU (scraped server-side). Each term/program
+/// has its own calendar; events render as Material date cards you can tap to
+/// see details, set a reminder, or add to Google Calendar. A top action exports
+/// the whole calendar as an .ics import.
+class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
 
   @override
-  State<CalendarPage> createState() => _CalendarPageState();
+  ConsumerState<CalendarPage> createState() => _CalendarPageState();
 }
 
-class _CalendarPageState extends State<CalendarPage> {
-  late List<CalendarEvent> _events;
+class _CalendarPageState extends ConsumerState<CalendarPage> {
   final Set<String> _reminders = {};
   static const _prefsKey = 'oc_calendar_reminders';
+  int? _selected; // index into the calendars list; null = auto default
 
   @override
   void initState() {
     super.initState();
-    _events = sampleCalendar(DateTime.now())
-      ..sort((a, b) => a.date.compareTo(b.date));
     _loadReminders();
   }
 
   Future<void> _loadReminders() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() => _reminders.addAll(prefs.getStringList(_prefsKey) ?? []));
+    if (mounted) {
+      setState(() => _reminders.addAll(prefs.getStringList(_prefsKey) ?? []));
+    }
   }
 
   Future<void> _toggle(CalendarEvent e, bool on) async {
@@ -45,12 +52,12 @@ class _CalendarPageState extends State<CalendarPage> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Enable notifications to get reminders.')));
       }
-      // Remind at 9am on the event day.
       final when = DateTime(e.date.year, e.date.month, e.date.day, 9);
       await NotificationService.instance.scheduleAt(
         id: e.notificationId,
         title: e.title,
-        body: e.detail ?? 'Academic calendar reminder',
+        body:
+            '${e.dateText}${e.detail != null && e.detail!.isNotEmpty ? ' · ${e.detail}' : ''}',
         when: when,
       );
     } else {
@@ -58,232 +65,382 @@ class _CalendarPageState extends State<CalendarPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final upcoming = _events.where((e) => !e.isPast).toList();
-    final past = _events.where((e) => e.isPast).toList();
-
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('Academic Calendar')),
-          SliverPadding(
-            padding: const EdgeInsets.all(Spacing.lg),
-            sliver: SliverList.list(children: [
-              const _ScaffoldNote(),
-              const SizedBox(height: Spacing.lg),
-              if (upcoming.isNotEmpty) ...[
-                _sectionLabel(context, 'Upcoming'),
-                const SizedBox(height: Spacing.sm),
-                for (var i = 0; i < upcoming.length; i++)
-                  FadeSlideIn(
-                    delayMs: 30 * i,
-                    child: _EventTile(
-                      event: upcoming[i],
-                      reminderOn: _reminders.contains(upcoming[i].id),
-                      onReminder: (v) => _toggle(upcoming[i], v),
-                      isFirst: i == 0,
-                      isLast: i == upcoming.length - 1,
-                    ),
-                  ),
-              ],
-              if (past.isNotEmpty) ...[
-                const SizedBox(height: Spacing.lg),
-                _sectionLabel(context, 'Past'),
-                const SizedBox(height: Spacing.sm),
-                for (var i = 0; i < past.length; i++)
-                  _EventTile(
-                    event: past[i],
-                    reminderOn: false,
-                    onReminder: null,
-                    isFirst: i == 0,
-                    isLast: i == past.length - 1,
-                    dimmed: true,
-                  ),
-              ],
-              const SizedBox(height: 96),
-            ]),
-          ),
-        ],
-      ),
-    );
+  Future<void> _open(String url) async {
+    final ok =
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the link.')));
+    }
   }
 
-  Widget _sectionLabel(BuildContext context, String t) => Padding(
-        padding: const EdgeInsets.only(left: Spacing.xs),
-        child: Text(t.toUpperCase(),
-            style: context.text.labelMedium?.copyWith(
-                color: context.scheme.primary,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8)),
-      );
-}
-
-class _ScaffoldNote extends StatelessWidget {
-  const _ScaffoldNote();
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Container(
-      padding: const EdgeInsets.all(Spacing.md),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(Radii.md),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.info_outline, size: 18, color: scheme.onSurfaceVariant),
-          const SizedBox(width: Spacing.sm),
-          Expanded(
-            child: Text(
-                'Sample calendar — your term\'s real dates load here once '
-                'connected. Reminders you set will still work.',
-                style: context.text.labelMedium
-                    ?.copyWith(color: scheme.onSurfaceVariant)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A timeline tile: a connector rail with a node, the date, and the event.
-class _EventTile extends StatelessWidget {
-  final CalendarEvent event;
-  final bool reminderOn;
-  final ValueChanged<bool>? onReminder;
-  final bool isFirst;
-  final bool isLast;
-  final bool dimmed;
-
-  const _EventTile({
-    required this.event,
-    required this.reminderOn,
-    required this.onReminder,
-    required this.isFirst,
-    required this.isLast,
-    this.dimmed = false,
-  });
-
-  static const _months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
-  ];
-
-  Color _typeColor(BuildContext context) => switch (event.type) {
-        CalendarEventType.payment => context.status.warn,
-        CalendarEventType.exam => context.status.bad,
-        CalendarEventType.holiday => context.status.good,
-        CalendarEventType.registration => context.scheme.primary,
-        CalendarEventType.classDay => context.scheme.tertiary,
-        CalendarEventType.other => context.scheme.primary,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final color = _typeColor(context);
-    return Opacity(
-      opacity: dimmed ? 0.6 : 1,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 42,
-              child: Column(
-                children: [
-                  const SizedBox(height: 14),
-                  Text('${event.date.day}',
-                      style: context.text.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                  Text(_months[event.date.month - 1],
-                      style: context.text.labelSmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
-              ),
-            ),
-            Column(
+  /// Bottom sheet with event details, reminder toggle, and add-to-Google.
+  void _showEvent(CalendarEvent e, String calName) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        final scheme = sheetCtx.scheme;
+        final on = _reminders.contains(e.id);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                Spacing.xl, 0, Spacing.xl, Spacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                    width: 2,
-                    height: 14,
-                    color:
-                        isFirst ? Colors.transparent : scheme.outlineVariant),
-                Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: scheme.surface, width: 2),
-                  ),
+                Row(
+                  children: [
+                    _EventBadge(e),
+                    const SizedBox(width: Spacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(e.title,
+                              style: sheetCtx.text.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800)),
+                          Text('${e.dateText}  ·  ${e.detail ?? ''}',
+                              style: sheetCtx.text.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: Container(
-                      width: 2,
-                      color:
-                          isLast ? Colors.transparent : scheme.outlineVariant),
+                const SizedBox(height: Spacing.lg),
+                if (!e.isPast)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: on,
+                    title: const Text('Remind me'),
+                    subtitle: const Text('Notification at 9am on the day'),
+                    onChanged: (v) {
+                      _toggle(e, v);
+                      Navigator.of(sheetCtx).pop();
+                    },
+                  ),
+                const SizedBox(height: Spacing.sm),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(sheetCtx).pop();
+                      _open(GoogleCalendar.eventUrl(e, calendarName: calName));
+                    },
+                    icon: const Icon(Icons.event_available_outlined, size: 18),
+                    label: const Text('Add to Google Calendar'),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(width: Spacing.md),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: Spacing.md),
-                child: Container(
-                  padding: const EdgeInsets.all(Spacing.md),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(Radii.md),
-                    border: Border(left: BorderSide(color: color, width: 3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(event.icon, size: 20, color: color),
-                      const SizedBox(width: Spacing.sm),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(event.title,
-                                style: context.text.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.w700)),
-                            if (event.detail != null)
-                              Text(event.detail!,
-                                  style: context.text.bodySmall?.copyWith(
-                                      color: scheme.onSurfaceVariant)),
-                          ],
-                        ),
-                      ),
-                      if (onReminder != null)
-                        IconButton(
-                          tooltip: reminderOn ? 'Reminder on' : 'Remind me',
-                          icon: Icon(
-                            reminderOn
-                                ? Icons.notifications_active
-                                : Icons.notifications_none,
-                            color: reminderOn ? color : scheme.onSurfaceVariant,
-                          ),
-                          onPressed: () => onReminder!(!reminderOn),
-                        ),
-                    ],
-                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(academicCalendarProvider);
+    return Scaffold(
+      body: async.when(
+        loading: () => const CollapsingTitleScrollView(
+          title: 'Academic Calendar',
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.all(Spacing.lg),
+              sliver: SliverToBoxAdapter(child: CardSkeleton(lines: 6)),
+            ),
+          ],
+        ),
+        error: (e, _) => CollapsingTitleScrollView(
+          title: 'Academic Calendar',
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(Spacing.lg),
+              sliver: SliverToBoxAdapter(
+                child: StateMessage(
+                  icon: Icons.error_outline,
+                  title: 'Couldn\'t load the calendar',
+                  subtitle: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => ref.invalidate(academicCalendarProvider),
                 ),
               ),
             ),
           ],
         ),
+        data: (data) => _body(context, data),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, AcademicCalendarData data) {
+    final cals = data.calendars;
+    if (cals.isEmpty) {
+      return const CollapsingTitleScrollView(
+        title: 'Academic Calendar',
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.all(Spacing.lg),
+            sliver: SliverToBoxAdapter(
+              child: StateMessage(
+                  icon: Icons.event_busy_outlined,
+                  title: 'No calendars published yet'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final defaultCal = data.defaultCalendar;
+    final idx = _selected ??
+        (defaultCal != null ? cals.indexOf(defaultCal) : 0)
+            .clamp(0, cals.length - 1);
+    final cal = cals[idx];
+    final calName = '${cal.term} · ${cal.program}';
+
+    // Order: upcoming first (ascending), then past — flattened with headers so
+    // we can render lazily via a sliver builder (no all-at-once layout lag).
+    final upcoming = cal.events.where((e) => !e.isPast).toList();
+    final past = cal.events.where((e) => e.isPast).toList();
+    final rows = <_Row>[
+      if (upcoming.isNotEmpty) const _Row.header('Upcoming'),
+      for (final e in upcoming) _Row.event(e),
+      if (past.isNotEmpty) const _Row.header('Past'),
+      for (final e in past) _Row.event(e, past: true),
+    ];
+
+    return CollapsingTitleScrollView(
+      title: 'Academic Calendar',
+      slivers: [
+        // Pinned controls: calendar picker + add-to-Google.
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              Spacing.lg, Spacing.sm, Spacing.lg, 0),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _CalendarPicker(
+                  calendars: cals,
+                  selected: idx,
+                  onSelect: (i) => setState(() => _selected = i),
+                ),
+                const SizedBox(height: Spacing.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _open(GoogleCalendar.icsDataUrl(
+                        cal.events,
+                        calendarName: calName)),
+                    icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                    label: const Text('Add all to Google Calendar'),
+                  ),
+                ),
+                const SizedBox(height: Spacing.sm),
+              ],
+            ),
+          ),
+        ),
+        // Lazily-built event cards.
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              Spacing.lg, 0, Spacing.lg, 96),
+          sliver: SliverList.builder(
+            itemCount: rows.length,
+            itemBuilder: (context, i) {
+              final row = rows[i];
+              if (row.header != null) {
+                return Padding(
+                  padding: EdgeInsets.only(
+                      left: Spacing.xs,
+                      top: i == 0 ? 0 : Spacing.lg,
+                      bottom: Spacing.sm),
+                  child: Text(row.header!.toUpperCase(),
+                      style: context.text.labelMedium?.copyWith(
+                          color: context.scheme.primary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8)),
+                );
+              }
+              final e = row.event!;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: Spacing.sm),
+                child: _EventCard(
+                  event: e,
+                  reminderOn: _reminders.contains(e.id),
+                  past: row.past,
+                  onTap: () => _showEvent(e, calName),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A flattened row: either a section header or an event.
+class _Row {
+  final String? header;
+  final CalendarEvent? event;
+  final bool past;
+  const _Row.header(this.header)
+      : event = null,
+        past = false;
+  const _Row.event(this.event, {this.past = false}) : header = null;
+}
+
+/// Dropdown to choose which calendar (term + program) to view.
+class _CalendarPicker extends StatelessWidget {
+  final List<AcademicCalendar> calendars;
+  final int selected;
+  final ValueChanged<int> onSelect;
+  const _CalendarPicker({
+    required this.calendars,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return DropdownButtonFormField<int>(
+      initialValue: selected,
+      isExpanded: true,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.calendar_month_outlined),
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(Radii.md),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      items: [
+        for (var i = 0; i < calendars.length; i++)
+          DropdownMenuItem(
+            value: i,
+            child: Text(
+              '${calendars[i].term} · ${calendars[i].program}'
+              '${calendars[i].revised ? ' (Revised)' : ''}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (i) => i != null ? onSelect(i) : null,
+    );
+  }
+}
+
+/// Material event card: a date badge, the event text, and a reminder dot. The
+/// whole card is tappable to open the detail sheet.
+class _EventCard extends StatelessWidget {
+  final CalendarEvent event;
+  final bool reminderOn;
+  final bool past;
+  final VoidCallback onTap;
+  const _EventCard({
+    required this.event,
+    required this.reminderOn,
+    required this.past,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return Opacity(
+      opacity: past ? 0.6 : 1,
+      child: SpringTap(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.lg),
+        child: Container(
+          padding: const EdgeInsets.all(Spacing.md),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(Radii.lg),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              _EventBadge(event),
+              const SizedBox(width: Spacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(event.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                        '${event.dateText}'
+                        '${event.detail != null && event.detail!.isNotEmpty ? '  ·  ${event.detail}' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              if (reminderOn)
+                Icon(Icons.notifications_active,
+                    size: 18, color: scheme.primary),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A square colored badge showing the start day + month, colored by event type.
+class _EventBadge extends StatelessWidget {
+  final CalendarEvent e;
+  const _EventBadge(this.e);
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  Color _color(BuildContext context) => switch (e.type) {
+        CalendarEventType.payment => context.status.warn,
+        CalendarEventType.exam => context.status.bad,
+        CalendarEventType.holiday => context.status.good,
+        CalendarEventType.registration => context.scheme.primary,
+        CalendarEventType.classDay => context.scheme.secondary,
+        CalendarEventType.other => context.scheme.secondary,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color(context);
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(Radii.md),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('${e.date.day}',
+              style: context.text.titleMedium?.copyWith(
+                  color: color, fontWeight: FontWeight.w800, height: 1.0)),
+          Text(_months[e.date.month - 1],
+              style: context.text.labelSmall
+                  ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
