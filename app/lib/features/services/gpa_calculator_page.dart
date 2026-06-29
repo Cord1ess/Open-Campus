@@ -77,8 +77,16 @@ class _GoalCardState extends State<_GoalCard> {
     }
 
     final remaining = (degreeReq - completed).clamp(0, degreeReq).toDouble();
+    // The goal can never be below the current CGPA (you already have that), and
+    // the slider's min is the current CGPA — so keep the goal in [cgpa, 4.0].
+    // Without this, a student with CGPA > 3.50 (the default) would feed the
+    // Slider a value below its min and trip an assertion / crash the page.
+    final sliderMin = cgpa.clamp(0, 4).toDouble();
+    final goal = _goal.clamp(sliderMin, 4.0);
+    // Already at a perfect 4.00 — no goal to set; a min==max slider would assert.
+    final atMax = sliderMin >= 4.0;
     final proj = projectGoal(
-      goalCgpa: _goal,
+      goalCgpa: goal,
       currentCgpa: cgpa,
       completedCredits: completed,
       remainingCredits: remaining,
@@ -90,25 +98,35 @@ class _GoalCardState extends State<_GoalCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text('Target CGPA',
-                  style: context.text.bodyMedium
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-              const Spacer(),
-              Text(_goal.toStringAsFixed(2),
-                  style: context.text.titleMedium?.copyWith(
-                      color: scheme.primary, fontWeight: FontWeight.w800)),
-            ],
-          ),
-          Slider(
-            value: _goal,
-            min: (cgpa).clamp(0, 4).toDouble(),
-            max: 4.0,
-            divisions: ((4.0 - cgpa) * 20).clamp(1, 80).toInt(),
-            label: _goal.toStringAsFixed(2),
-            onChanged: (v) => setState(() => _goal = v),
-          ),
+          if (atMax)
+            _resultBanner(
+              context,
+              icon: Icons.workspace_premium,
+              color: context.status.good,
+              title: 'Perfect CGPA',
+              body: 'You\'re already at a 4.00 — keep it up!',
+            )
+          else ...[
+            Row(
+              children: [
+                Text('Target CGPA',
+                    style: context.text.bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                const Spacer(),
+                Text(goal.toStringAsFixed(2),
+                    style: context.text.titleMedium?.copyWith(
+                        color: scheme.primary, fontWeight: FontWeight.w800)),
+              ],
+            ),
+            Slider(
+              value: goal,
+              min: sliderMin,
+              max: 4.0,
+              divisions: ((4.0 - sliderMin) * 20).clamp(1, 80).toInt(),
+              label: goal.toStringAsFixed(2),
+              onChanged: (v) => setState(() => _goal = v),
+            ),
+          ],
           const SizedBox(height: Spacing.sm),
           _line(
               context,
@@ -120,27 +138,39 @@ class _GoalCardState extends State<_GoalCard> {
               'Remaining',
               '${remaining.toStringAsFixed(0)} cr to '
                   '${degreeReq.toStringAsFixed(0)}'),
-          const SizedBox(height: Spacing.md),
-          if (proj.reachable)
-            _resultBanner(
-              context,
-              icon: Icons.check_circle_outline,
-              color: context.status.good,
-              title: 'Reachable',
-              body: 'Average ${proj.neededAvg.toStringAsFixed(2)} '
-                  '(${nearestGradeAtOrAbove(proj.neededAvg).letter}) across your '
-                  'remaining ${remaining.toStringAsFixed(0)} credits.',
-            )
-          else
-            _resultBanner(
-              context,
-              icon: Icons.info_outline,
-              color: context.status.warn,
-              title: 'Out of reach',
-              body: 'Even with all A\'s the most you can reach is '
-                  '${proj.maxReachableCgpa.toStringAsFixed(2)}. '
-                  'Set a goal at or below that.',
-            ),
+          if (!atMax) ...[
+            const SizedBox(height: Spacing.md),
+            if (proj.reachable && proj.neededAvg <= cgpa)
+              // Goal already at/below current standing — no lift required.
+              _resultBanner(
+                context,
+                icon: Icons.check_circle_outline,
+                color: context.status.good,
+                title: 'Already on track',
+                body: 'Maintaining around your current ${cgpa.toStringAsFixed(2)} '
+                    'keeps you at or above this goal.',
+              )
+            else if (proj.reachable)
+              _resultBanner(
+                context,
+                icon: Icons.check_circle_outline,
+                color: context.status.good,
+                title: 'Reachable',
+                body: 'Average ${proj.neededAvg.toStringAsFixed(2)} '
+                    '(${nearestGradeAtOrAbove(proj.neededAvg).letter}) across your '
+                    'remaining ${remaining.toStringAsFixed(0)} credits.',
+              )
+            else
+              _resultBanner(
+                context,
+                icon: Icons.info_outline,
+                color: context.status.warn,
+                title: 'Out of reach',
+                body: 'Even with all A\'s the most you can reach is '
+                    '${proj.maxReachableCgpa.toStringAsFixed(2)}. '
+                    'Set a goal at or below that.',
+              ),
+          ],
         ],
       ),
     );

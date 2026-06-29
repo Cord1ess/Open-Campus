@@ -65,17 +65,14 @@ class _Content extends StatelessWidget {
   Widget build(BuildContext context) {
     final groups = d.byTrimester;
     // Current-term tuition+trimester fee = charges (not payments) in the most
-    // recent trimester group. Used for the installment breakdown.
-    double currentFee = 0;
-    String? currentTerm;
-    for (final entry in groups.entries) {
-      if (entry.key == 'Payments') continue;
-      currentTerm = entry.key;
-      currentFee = entry.value
-          .where((i) => !i.isPayment)
-          .fold<double>(0, (s, i) => s + (i.amount ?? 0));
-      break; // first non-payment group is the most recent term
-    }
+    // recent trimester, picked deterministically (highest term code) so the
+    // installment breakdown isn't tied to backend ordering.
+    final currentTerm = d.currentTrimester;
+    final currentFee = currentTerm == null
+        ? 0.0
+        : (groups[currentTerm] ?? const [])
+            .where((i) => !i.isPayment)
+            .fold<double>(0, (s, i) => s + (i.amount ?? 0));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

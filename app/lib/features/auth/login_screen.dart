@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/api_config.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/brand_logo.dart';
@@ -22,18 +23,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _busy = false;
   bool _obscure = true;
   bool _remember = false;
+  bool _slowHint = false;
+  Timer? _slowTimer;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    // If a release build shipped without a backend URL, say so plainly instead
-    // of letting every login fail with an opaque network error.
-    _error = ApiConfig.missing
-        ? 'This build has no backend configured. It must be built with '
-            '--dart-define=OC_API_BASE=https://your-host'
-        : widget.message;
+    _error = widget.message;
     _prefillSaved();
+    // Warm the backend while the user types — a sleeping free-tier server then
+    // has a head start and the actual login isn't waiting on a cold boot.
+    ref.read(apiClientProvider).warmUp();
   }
 
   /// If the user previously opted to remember their login (on-device, ≤30 days),
@@ -51,6 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
+    _slowTimer?.cancel();
     _id.dispose();
     _pw.dispose();
     super.dispose();
@@ -64,13 +66,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _slowHint = false;
+    });
+    // If login is taking a while, reassure the user it's a cold start, not a hang.
+    _slowTimer?.cancel();
+    _slowTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted && _busy) setState(() => _slowHint = true);
     });
     final err = await ref
         .read(authControllerProvider.notifier)
         .login(_id.text.trim(), _pw.text, remember: _remember);
+    _slowTimer?.cancel();
     if (mounted) {
       setState(() {
         _busy = false;
+        _slowHint = false;
         _error = err;
       });
     }
@@ -194,6 +204,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             FilledButton(
                               onPressed: _busy ? null : _submit,
                               child: Text(_busy ? 'Signing in…' : 'Sign in'),
+                            ),
+                            AnimatedSize(
+                              duration: Motion.fast,
+                              child: !_slowHint
+                                  ? const SizedBox(width: double.infinity)
+                                  : Padding(
+                                      padding: const EdgeInsets.only(
+                                          top: Spacing.md),
+                                      child: Text(
+                                        'Waking up the server — first sign-in '
+                                        'after a while can take up to a minute.',
+                                        textAlign: TextAlign.center,
+                                        style: context.text.bodySmall?.copyWith(
+                                            color: scheme.onSurfaceVariant),
+                                      ),
+                                    ),
                             ),
                           ],
                         ),

@@ -158,9 +158,12 @@ class _Hero extends StatelessWidget {
         (r != null && r.semesters.isNotEmpty ? r.semesters.first.cgpa : null);
     final att = a != null ? overallAttendancePct(a) : null;
 
-    // Real name from /student/home; greeting falls back gracefully while loading.
-    final name = home?.name ?? (roll != null ? 'Student' : 'Welcome');
-    final firstName = name.split(' ').first;
+    // Real name from /student/home; greeting falls back gracefully while
+    // loading or if the backend sends an empty name (treat blank as absent).
+    final realName = home?.name?.trim();
+    final hasName = realName != null && realName.isNotEmpty;
+    final firstName =
+        hasName ? realName.split(' ').first : (roll != null ? 'Student' : 'Welcome');
     final avatar = avatarBytes;
     // Distinct-but-harmonized accent tones derived from the seed, so the three
     // hero cards each get their own on-theme color (not the same two repeated).
@@ -201,7 +204,7 @@ class _Hero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Spacing.xl),
-          Text(home?.name != null ? 'Welcome back,' : 'Welcome',
+          Text(hasName ? 'Welcome back,' : 'Welcome',
               style: context.text.bodyMedium
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           Text(firstName,

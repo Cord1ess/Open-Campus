@@ -30,7 +30,7 @@ class Avatar extends StatelessWidget {
           ),
         ],
       ),
-      child: bytes == null
+      child: (bytes == null || bytes!.isEmpty)
           ? Icon(Icons.person,
               size: radius * 1.0, color: scheme.onPrimaryContainer)
           : ClipOval(
@@ -41,6 +41,10 @@ class Avatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 alignment: Alignment.topCenter, // faces sit a touch high
                 gaplessPlayback: true,
+                // A corrupt/undecodable image falls back to the person icon
+                // instead of Flutter's broken-image box.
+                errorBuilder: (_, __, ___) => Icon(Icons.person,
+                    size: radius * 1.0, color: scheme.onPrimaryContainer),
               ),
             ),
     );

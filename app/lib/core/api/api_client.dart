@@ -37,8 +37,11 @@ class ApiClient {
       : _tokenProvider = tokenProvider,
         _dio = Dio(BaseOptions(
           baseUrl: ApiConfig.baseUrl,
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 40),
+          // A free-tier backend (e.g. Render) can be asleep and take 30–50s to
+          // wake on the first request. Generous timeouts so a cold start reads
+          // as "waking up", not "unreachable".
+          connectTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
           // We handle non-2xx ourselves rather than throwing.
           validateStatus: (_) => true,
         )) {
@@ -56,23 +59,46 @@ class ApiClient {
   final Dio _dio;
   final String? Function()? _tokenProvider;
 
-  /// POST /auth/login — returns the token on success.
+  /// Fire-and-forget warm-up. Pings /health so a sleeping free-tier backend
+  /// starts waking while the user is still typing credentials. Never throws.
+  Future<void> warmUp() async {
+    try {
+      await _dio.get('/health',
+          options: Options(receiveTimeout: const Duration(seconds: 60)));
+    } catch (_) {/* best effort */}
+  }
+
+  /// POST /auth/login — returns the token on success. Retries once on a pure
+  /// connection failure (the first request often just wakes a sleeping backend).
   Future<ApiResult<({String token, String roll})>> login(
       String studentId, String password) async {
-    try {
-      final r = await _dio.post('/auth/login', data: {
-        'student_id': studentId,
-        'password': password,
-      });
-      if (r.statusCode == 200) {
-        final d = r.data as Map;
-        return ApiOk((token: d['token'] as String, roll: d['roll'] as String));
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final r = await _dio.post('/auth/login', data: {
+          'student_id': studentId,
+          'password': password,
+        });
+        if (r.statusCode == 200) {
+          final d = r.data;
+          // Defensive: a 200 with an unexpected body shouldn't crash login.
+          if (d is Map && d['token'] is String && d['roll'] is String) {
+            return ApiOk(
+                (token: d['token'] as String, roll: d['roll'] as String));
+          }
+          return const ApiUnavailable('Unexpected response from the server.');
+        }
+        if (r.statusCode == 401) return const ApiUnauthorized();
+        return ApiUnavailable(_detail(r) ?? 'Login failed.');
+      } on DioException catch (e) {
+        final coldStart = e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout;
+        // Retry once on a cold-start-shaped failure; otherwise report.
+        if (coldStart && attempt == 0) continue;
+        return ApiUnavailable(_dioMessage(e));
       }
-      if (r.statusCode == 401) return const ApiUnauthorized();
-      return ApiUnavailable(_detail(r) ?? 'Login failed.');
-    } on DioException catch (e) {
-      return ApiUnavailable(_dioMessage(e));
     }
+    return const ApiUnavailable('Network error. Please try again.');
   }
 
   Future<void> logout() async {
@@ -117,7 +143,11 @@ class ApiClient {
         path,
         options: Options(responseType: ResponseType.bytes),
       );
-      if (r.statusCode == 200 && r.data != null) return r.data;
+      // Treat an empty body as "no image" so the avatar falls back to the
+      // placeholder icon instead of trying to decode 0 bytes (broken-image box).
+      if (r.statusCode == 200 && r.data != null && r.data!.isNotEmpty) {
+        return r.data;
+      }
       return null;
     } catch (_) {
       return null;
@@ -131,10 +161,17 @@ class ApiClient {
   }
 
   String _dioMessage(DioException e) {
-    if (e.type == DioExceptionType.connectionError ||
-        e.type == DioExceptionType.connectionTimeout) {
-      return 'Cannot reach the Open Campus server. Is the backend running?';
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.receiveTimeout:
+        // Most often a free-tier backend still waking from sleep.
+        return 'The server is waking up — this can take up to a minute on the '
+            'free tier. Please try again in a moment.';
+      case DioExceptionType.connectionError:
+        return 'Cannot reach the Open Campus server. Check your connection and '
+            'try again.';
+      default:
+        return 'Network error. Please try again.';
     }
-    return 'Network error. Please try again.';
   }
 }

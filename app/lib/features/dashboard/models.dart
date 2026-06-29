@@ -43,7 +43,8 @@ class ResultsData {
 
   factory ResultsData.fromJson(Map<String, dynamic> j) => ResultsData(
         semesters: ((j['semesters'] as List?) ?? const [])
-            .map((e) => SemesterResult.fromJson(e as Map<String, dynamic>))
+            .whereType<Map>()
+            .map((e) => SemesterResult.fromJson(e.cast<String, dynamic>()))
             .toList(),
         latestCgpa: (j['latest_cgpa'] as num?)?.toDouble(),
       );
@@ -98,7 +99,8 @@ class AttendanceData {
 
   factory AttendanceData.fromJson(Map<String, dynamic> j) => AttendanceData(
         courses: ((j['courses'] as List?) ?? const [])
-            .map((e) => CourseAttendance.fromJson(e as Map<String, dynamic>))
+            .whereType<Map>()
+            .map((e) => CourseAttendance.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

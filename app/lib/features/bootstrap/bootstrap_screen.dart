@@ -75,10 +75,14 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final progress = _steps.isEmpty ? 1.0 : _index / _steps.length;
-    // Once the profile step lands we can greet by first name.
+    // Once the profile step lands we can greet by first name (treat a blank
+    // name from the backend as absent).
     final home = ref.watch(homeProvider);
-    final name = home is ResData<HomeSummary>
-        ? home.loaded.data.name?.split(' ').first
+    final rawName = home is ResData<HomeSummary>
+        ? home.loaded.data.name?.trim()
+        : null;
+    final name = (rawName != null && rawName.isNotEmpty)
+        ? rawName.split(' ').first
         : null;
 
     return Scaffold(

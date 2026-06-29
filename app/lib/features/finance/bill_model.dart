@@ -71,13 +71,32 @@ class BillData {
 
   bool get hasDue => (balance ?? 0) > 0;
 
-  /// Items grouped by trimester (newest groups first as they appear).
+  /// Items grouped by trimester (in arrival order).
   Map<String, List<BillItem>> get byTrimester {
     final map = <String, List<BillItem>>{};
     for (final i in items) {
       (map[i.trimester ?? 'Payments'] ??= []).add(i);
     }
     return map;
+  }
+
+  /// The most recent trimester key, chosen deterministically rather than relying
+  /// on backend ordering. UCAM term codes embed a number that increases over
+  /// time (e.g. "[261] Spring 2026" > "[253] ..."), so we pick the highest such
+  /// number; if no codes are present we fall back to first-seen order.
+  String? get currentTrimester {
+    final terms = <String>[];
+    for (final i in items) {
+      final t = i.trimester;
+      if (t != null && t != 'Payments' && !terms.contains(t)) terms.add(t);
+    }
+    if (terms.isEmpty) return null;
+    int codeOf(String t) {
+      final m = RegExp(r'\d+').firstMatch(t);
+      return m != null ? int.parse(m.group(0)!) : -1;
+    }
+    terms.sort((a, b) => codeOf(b).compareTo(codeOf(a)));
+    return terms.first;
   }
 
   factory BillData.fromJson(Map<String, dynamic> j) => BillData(
