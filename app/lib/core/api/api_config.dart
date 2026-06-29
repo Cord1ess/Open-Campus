@@ -2,35 +2,34 @@ import 'package:flutter/foundation.dart';
 
 /// Base URL of the Open Campus backend.
 ///
-/// The hosted backend URL MUST be supplied at build/run time:
+/// Defaults to the hosted backend, so release builds and testers need no flags.
+/// Override for a different host with:
 ///   --dart-define=OC_API_BASE=https://your-api-host
 ///
-/// In a release build this is REQUIRED — there is no usable default, because a
-/// tester's device can't reach the developer's localhost. If it's missing we
-/// surface a clear configuration error (see [missing]) instead of silently
-/// pointing at an unreachable host.
-///
-/// In debug builds we fall back to local dev hosts for convenience:
+/// In debug builds we fall back to local dev hosts so `flutter run` against a
+/// local backend just works:
 ///   - Web (Chrome):        http://127.0.0.1:8000
 ///   - Android emulator:    http://10.0.2.2:8000   (host loopback alias)
 ///   - iOS sim / desktop:   http://127.0.0.1:8000
 class ApiConfig {
+  /// The hosted backend. Used by release builds (and debug builds that don't
+  /// pass --dart-define and aren't on a local-dev platform default below).
+  static const String _hosted = 'https://open-campus-sdsw.onrender.com';
+
   static const String _override =
       String.fromEnvironment('OC_API_BASE', defaultValue: '');
 
-  /// True when no backend URL was provided and we're not in a local debug build
-  /// — i.e. a release build that would have nowhere to talk to. The UI shows a
-  /// setup message in this case rather than failing opaquely.
-  static bool get missing => _override.isEmpty && kReleaseMode;
+  /// Retained for the login screen's setup check. Always false now that there's
+  /// a real hosted default.
+  static bool get missing => false;
 
   static String get baseUrl {
     if (_override.isNotEmpty) return _override;
 
-    // Release with no configured backend: there's no safe default. Return an
-    // obviously-invalid sentinel; `missing` lets the app show a clear message.
-    if (kReleaseMode) return 'https://api.invalid';
+    // Release: always the hosted backend.
+    if (kReleaseMode) return _hosted;
 
-    // Local development fallbacks (debug only).
+    // Debug: prefer local dev hosts so a local backend is reachable.
     if (kIsWeb) return 'http://127.0.0.1:8000';
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:8000';

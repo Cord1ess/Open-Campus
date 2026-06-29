@@ -4,17 +4,26 @@
 .flutter-plugins-dependencies
 build/
 .packages
-pubspec.lock
-
-# Generated platform folders (regenerate with `flutter create .`)
-# Keep these IF you add platform-specific native code; for now they're generated.
-android/
-ios/
-web/
-windows/
-linux/
-macos/
+.metadata
 
 # IDE
 .idea/
 *.iml
+
+# --- Android: commit the source, ignore generated/build artifacts & secrets ---
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/key.properties
+android/app/*.jks
+android/app/upload-keystore.jks
+android/captures/
+**/GeneratedPluginRegistrant.*
+
+# --- iOS (not scaffolded yet; ignore ephemeral if added later) ---
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Pods/
+ios/.symlinks/
+
+# web/ is committed (custom index.html, manifest, icons).
