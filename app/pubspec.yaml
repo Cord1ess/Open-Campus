@@ -1,0 +1,35 @@
+name: open_campus
+description: "Open Campus — unofficial companion app for UIU's UCAM portal."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # State management
+  flutter_riverpod: ^2.6.1
+  # HTTP client
+  dio: ^5.7.0
+  # Secure token storage (Keychain/Keystore on mobile; in-memory/IndexedDB on web)
+  flutter_secure_storage: ^9.2.2
+  # On-device last-view cache (the stateless-server model)
+  shared_preferences: ^2.3.3
+  # Charts for the data-dense dashboard
+  fl_chart: ^0.69.2
+  # Google Fonts for the design system type
+  google_fonts: ^6.2.1
+  # Open external links (exam-routine Google Sheets, etc.)
+  url_launcher: ^6.3.1
+  flutter_local_notifications: ^22.0.1
+  timezone: ^0.11.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

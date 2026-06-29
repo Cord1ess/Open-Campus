@@ -1,0 +1,44 @@
+# --- Secrets & personal data (NEVER commit) ---
+.env
+*.env
+!.env.example
+*.har                      # captured traffic contains personal data + session cookies
+docs/captures/            # raw captures (personal data)
+backend/captures/         # captured academic data
+
+# --- Python ---
+backend/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Databases ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Flutter ---
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.metadata
+# Generated platform ephemeral files (created by `flutter create --platforms=...`)
+app/android/.gradle/
+app/android/local.properties
+app/**/GeneratedPluginRegistrant.*
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local tooling
+.claude/
