@@ -8,9 +8,11 @@ import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
 import '../common/collapsing_title.dart';
 import 'bill_model.dart';
+import 'payment_history_page.dart';
 
-/// Full bill: live balance hero + itemized charges and payments grouped by
-/// trimester. Data from /student/bill.
+/// Balance & Dues: the live balance/dues hero, totals, and the current term's
+/// installment plan — NO transaction history (that lives on Payment History).
+/// Data from /student/bill.
 class BillPage extends ConsumerStatefulWidget {
   const BillPage({super.key});
 
@@ -37,12 +39,15 @@ class _BillPageState extends ConsumerState<BillPage> {
         onRefresh: () => ref.read(billProvider.notifier).load(force: true),
         child: CustomScrollView(
           slivers: [
-            SliverCollapsingAppBar(title: 'Bill & Payments'),
+            const SliverCollapsingAppBar(title: 'Balance & Dues'),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [
                 switch (state) {
-                  ResLoading() => const CardSkeleton(lines: 6),
+                  ResLoading() => const SectionCard(
+                      title: 'Balance & Dues',
+                      icon: Icons.account_balance_wallet_outlined,
+                      child: CardSkeleton(label: 'Loading your balance…')),
                   ResError(:final message) => StateMessage(
                       icon: Icons.cloud_off,
                       title: 'Couldn\'t load',
@@ -105,14 +110,51 @@ class _Content extends StatelessWidget {
           ),
         ],
         const SizedBox(height: Spacing.lg),
-        for (final (i, entry) in groups.entries.indexed) ...[
-          if (i > 0) const SizedBox(height: Spacing.lg),
-          FadeSlideIn(
-            delayMs: 60 + i * 40,
-            child: _GroupCard(title: entry.key, items: entry.value),
-          ),
-        ],
+        const FadeSlideIn(delayMs: 100, child: _HistoryLink()),
       ],
+    );
+  }
+}
+
+/// Footer link to the separate Payment History page.
+class _HistoryLink extends StatelessWidget {
+  const _HistoryLink();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return SpringTap(
+      onTap: () => Navigator.of(context)
+          .push(sharedAxisRoute(const PaymentHistoryPage())),
+      borderRadius: BorderRadius.circular(Radii.lg),
+      child: Container(
+        padding: const EdgeInsets.all(Spacing.lg),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.receipt_long_outlined, color: scheme.primary),
+            const SizedBox(width: Spacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Payment history',
+                      style: context.text.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('All bills & payments, by trimester',
+                      style: context.text.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_rounded, color: scheme.primary),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -244,19 +286,38 @@ class _BalanceHero extends StatelessWidget {
     final scheme = context.scheme;
     final hasDue = d.hasDue;
     final balance = d.balance ?? 0;
-    final color = hasDue ? context.status.bad : context.status.good;
+    // Gradient hero in a theme accent: dues use the primary accent, a clear
+    // balance uses the secondary (calmer) accent. No fixed red/green.
+    final accent = hasDue ? scheme.primary : scheme.secondary;
+    final onAcc = hasDue ? scheme.onPrimary : scheme.onSecondary;
     return Container(
       padding: const EdgeInsets.all(Spacing.xl),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accent, Color.lerp(accent, Colors.black, 0.18)!],
+        ),
         borderRadius: BorderRadius.circular(Radii.lg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(hasDue ? 'Amount due' : 'Current balance',
-              style: context.text.labelLarge
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          Row(
+            children: [
+              Icon(
+                  hasDue
+                      ? Icons.error_outline
+                      : Icons.check_circle_outline,
+                  size: 18,
+                  color: onAcc),
+              const SizedBox(width: 6),
+              Text(hasDue ? 'Amount due' : 'Current balance',
+                  style: context.text.labelLarge?.copyWith(
+                      color: onAcc.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
           const SizedBox(height: 4),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -264,27 +325,29 @@ class _BalanceHero extends StatelessWidget {
             children: [
               Text(hasDue ? bdt(balance) : 'Clear',
                   style: context.text.displaySmall
-                      ?.copyWith(color: color, fontWeight: FontWeight.w800)),
+                      ?.copyWith(color: onAcc, fontWeight: FontWeight.w800)),
               const SizedBox(width: Spacing.sm),
               if (!hasDue && balance < 0)
                 Text('${bdt(balance, signed: true)} advance',
                     style: context.text.labelMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                        ?.copyWith(color: onAcc.withValues(alpha: 0.85))),
             ],
           ),
+          const SizedBox(height: Spacing.lg),
+          Divider(color: onAcc.withValues(alpha: 0.2), height: 1),
           const SizedBox(height: Spacing.lg),
           Row(
             children: [
               Expanded(
                   child: _miniStat(context, 'Total billed',
-                      bdt(d.totalBilled))),
+                      bdt(d.totalBilled), onAcc)),
               Expanded(
                   child:
-                      _miniStat(context, 'Total paid', bdt(d.totalPaid))),
+                      _miniStat(context, 'Total paid', bdt(d.totalPaid), onAcc)),
               if (d.totalDiscount != null && d.totalDiscount != 0)
                 Expanded(
                     child: _miniStat(
-                        context, 'Waived', bdt(d.totalDiscount!.abs()))),
+                        context, 'Waived', bdt(d.totalDiscount!.abs()), onAcc)),
             ],
           ),
         ],
@@ -292,88 +355,19 @@ class _BalanceHero extends StatelessWidget {
     );
   }
 
-  Widget _miniStat(BuildContext context, String label, String value) {
+  Widget _miniStat(BuildContext context, String label, String value, Color onAcc) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
             style: context.text.labelSmall
-                ?.copyWith(color: context.scheme.onSurfaceVariant)),
+                ?.copyWith(color: onAcc.withValues(alpha: 0.85))),
         const SizedBox(height: 2),
         Text(value,
             style: context.text.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700)),
+                ?.copyWith(color: onAcc, fontWeight: FontWeight.w800)),
       ],
     );
   }
 }
 
-class _GroupCard extends StatelessWidget {
-  final String title;
-  final List<BillItem> items;
-  const _GroupCard({required this.title, required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SectionCard(
-      title: title,
-      icon: Icons.receipt_long_outlined,
-      child: Column(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0)
-              Divider(height: Spacing.lg, color: scheme.outlineVariant),
-            _ItemRow(items[i]),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ItemRow extends StatelessWidget {
-  final BillItem item;
-  const _ItemRow(this.item);
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final isPayment = item.isPayment;
-    final amount = isPayment ? item.payment : item.amount;
-    final color = isPayment ? context.status.good : scheme.onSurface;
-    final title = item.courseCode ?? item.feeType ?? 'Item';
-    final sub = [
-      if (item.courseCode != null) item.feeType,
-      if (item.date != null) item.date,
-    ].whereType<String>().join(' · ');
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(isPayment ? Icons.south_west : Icons.north_east,
-            size: 16,
-            color: isPayment ? context.status.good : scheme.onSurfaceVariant),
-        const SizedBox(width: Spacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  style: context.text.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              if (sub.isNotEmpty)
-                Text(sub,
-                    style: context.text.labelSmall
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-          ),
-        ),
-        const SizedBox(width: Spacing.sm),
-        Text('${isPayment ? '+' : ''}${bdt(amount)}',
-            style: context.text.titleSmall
-                ?.copyWith(color: color, fontWeight: FontWeight.w700)),
-      ],
-    );
-  }
-}

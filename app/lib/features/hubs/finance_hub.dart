@@ -7,6 +7,7 @@ import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
 import '../finance/bill_page.dart';
+import '../finance/payment_history_page.dart';
 import 'hub_page.dart';
 
 class FinanceHub extends ConsumerWidget {
@@ -59,9 +60,10 @@ class FinanceHub extends ConsumerWidget {
           HubFeature(
             icon: Icons.receipt_long_outlined,
             title: 'Payment History',
-            subtitle: 'Your transaction ledger',
+            subtitle: 'Bills & payments by trimester',
             status: FeatureStatus.live,
-            onTap: (c) => Navigator.of(c).push(sharedAxisRoute(const BillPage())),
+            onTap: (c) => Navigator.of(c)
+                .push(sharedAxisRoute(const PaymentHistoryPage())),
           ),
           const HubFeature(
             icon: Icons.request_quote_outlined,
