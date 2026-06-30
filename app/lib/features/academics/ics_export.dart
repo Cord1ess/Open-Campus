@@ -29,6 +29,14 @@ Future<bool> exportIcs(
   return saveOrOpenIcs(ics, '$filename.ics');
 }
 
+/// Export a pre-built ICS document (e.g. the weekly class routine, which uses
+/// recurring VEVENTs rather than the all-day calendar events above). Same
+/// platform delivery as [exportIcs].
+Future<bool> exportRawIcs(String ics, {String? calendarName}) {
+  final filename = _safeName(calendarName) ?? 'open-campus';
+  return saveOrOpenIcs(ics, '$filename.ics');
+}
+
 /// Make a filesystem-safe file name from the calendar's display name.
 String? _safeName(String? name) {
   if (name == null || name.trim().isEmpty) return null;

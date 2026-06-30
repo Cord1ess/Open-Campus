@@ -8,6 +8,7 @@ import '../academics/calendar_model.dart';
 import '../academics/course_history_model.dart';
 import '../academics/exam_routine_model.dart';
 import '../academics/marks_model.dart';
+import '../academics/uiu_notices_model.dart';
 import '../finance/bill_model.dart';
 import 'home_model.dart';
 import 'models.dart';
@@ -325,6 +326,21 @@ final marksProvider =
     ApiUnauthorized() => throw Exception('Session ended. Please log in again.'),
     ApiSessionExpired() => throw Exception('UCAM session expired.'),
     ApiUnavailable(:final message) => throw Exception(message),
+  };
+});
+
+/// Public UIU notices, one page at a time (cached server-side). Keyed by page.
+final uiuNoticesProvider =
+    FutureProvider.family<UiuNoticesData, int>((ref, page) async {
+  final api = ref.read(apiClientProvider);
+  final res = await api.getJson<UiuNoticesData>(
+    '/calendar/notices/uiu?page=$page',
+    (j) => UiuNoticesData.fromJson(j as Map<String, dynamic>),
+  );
+  return switch (res) {
+    ApiOk(:final data) => data,
+    ApiUnavailable(:final message) => throw Exception(message),
+    _ => const UiuNoticesData(),
   };
 });
 

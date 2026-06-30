@@ -30,7 +30,7 @@ class _MarksPageState extends ConsumerState<MarksPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverCollapsingAppBar(title: 'Marks'),
+          const SliverCollapsingAppBar(title: 'Course Marks'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [
@@ -210,9 +210,16 @@ class _CourseCard extends ConsumerWidget {
         ),
         data: (cm) {
           if (cm == null) {
-            return Text('No marks entered yet for this course.',
-                style: context.text.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant));
+            return Row(
+              children: [
+                Icon(Icons.hourglass_empty_rounded,
+                    size: 16, color: scheme.onSurfaceVariant),
+                const SizedBox(width: Spacing.sm),
+                Text('Marks not entered',
+                    style: context.text.bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            );
           }
           return _CourseMarksView(cm, fallbackTitle: label);
         },
@@ -256,9 +263,22 @@ class _CourseMarksView extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final title = c.title.isNotEmpty ? c.title : fallbackTitle;
-    final pct = (c.totalMax != null && c.totalMax! > 0 && c.totalObtained != null)
-        ? c.totalObtained! / c.totalMax! * 100
-        : null;
+
+    // Total is conventionally out of 100. Show the obtained out of 100 (or the
+    // reported max if UCAM gave a different denominator).
+    final totalMax = c.totalMax ?? 100;
+
+    // Each assessment becomes a COLUMN: (label, value). The last column is Total.
+    final columns = <(String, String, bool)>[
+      for (final comp in c.components)
+        (
+          comp.name,
+          comp.obtained != null ? _fmt(comp.obtained!) : '—',
+          false,
+        ),
+      if (c.totalObtained != null)
+        ('Total', '${_fmt(c.totalObtained!)} / ${_fmt(totalMax)}', true),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,116 +297,121 @@ class _CourseMarksView extends StatelessWidget {
           ),
         ],
         const SizedBox(height: Spacing.md),
-        // Table.
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: scheme.outlineVariant),
-            borderRadius: BorderRadius.circular(Radii.sm),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              // Header row.
-              const _TableRow(
-                cells: ['Assessment', 'Marks', 'Out of'],
-                header: true,
+        if (columns.isEmpty)
+          // The course exists but no marks rows were published.
+          _notEntered(context)
+        else
+          // Column-wise marks table: assessments left→right, value beneath each,
+          // Total as the final column. Horizontally scrollable when it's wide.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: scheme.outlineVariant),
+                borderRadius: BorderRadius.circular(Radii.sm),
               ),
-              for (final comp in c.components)
-                _TableRow(cells: [
-                  comp.name,
-                  comp.obtained?.toStringAsFixed(2) ?? '—',
-                  comp.max?.toStringAsFixed(2) ?? '—',
-                ]),
-              if (c.totalObtained != null)
-                _TableRow(
-                  cells: [
-                    'Total',
-                    c.totalObtained!.toStringAsFixed(2),
-                    c.totalMax?.toStringAsFixed(2) ?? '—',
+              clipBehavior: Clip.antiAlias,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < columns.length; i++)
+                      _MarkColumn(
+                        label: columns[i].$1,
+                        value: columns[i].$2,
+                        isTotal: columns[i].$3,
+                        showDivider: i > 0,
+                      ),
                   ],
-                  total: true,
                 ),
-            ],
+              ),
+            ),
           ),
-        ),
-        if (pct != null) ...[
-          const SizedBox(height: Spacing.sm),
-          Row(
-            children: [
-              Text('Percentage',
-                  style: context.text.labelMedium
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-              const Spacer(),
-              Text('${pct.toStringAsFixed(1)}%',
-                  style: context.text.titleSmall?.copyWith(
-                      color: scheme.primary, fontWeight: FontWeight.w800)),
-            ],
-          ),
-        ],
       ],
+    );
+  }
+
+  Widget _notEntered(BuildContext context) {
+    final scheme = context.scheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: Spacing.md, vertical: Spacing.sm),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.hourglass_empty_rounded,
+              size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: Spacing.sm),
+          Text('Marks not entered',
+              style: context.text.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+      ),
     );
   }
 }
 
-/// One table row: a wide left "Assessment" cell + two numeric columns. Styled by
-/// [header]/[total]; all colours are theme-driven.
-class _TableRow extends StatelessWidget {
-  final List<String> cells; // [name, obtained, max]
-  final bool header;
-  final bool total;
-  const _TableRow({required this.cells, this.header = false, this.total = false});
+/// One column of the marks table: an assessment label on top and its value
+/// beneath. The Total column is accent-tinted. All colours are theme-driven.
+class _MarkColumn extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool isTotal;
+  final bool showDivider;
+  const _MarkColumn({
+    required this.label,
+    required this.value,
+    required this.isTotal,
+    required this.showDivider,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final bg = header
-        ? scheme.surfaceContainerHighest
-        : total
-            ? scheme.primary.withValues(alpha: 0.08)
-            : Colors.transparent;
-    final weight =
-        header || total ? FontWeight.w800 : FontWeight.w500;
-    final color = header
-        ? scheme.onSurfaceVariant
-        : total
-            ? scheme.primary
-            : scheme.onSurface;
-    final style = (header ? context.text.labelSmall : context.text.bodyMedium)
-        ?.copyWith(fontWeight: weight, color: color);
-
     return Container(
+      constraints: BoxConstraints(minWidth: isTotal ? 96 : 76),
       decoration: BoxDecoration(
-        color: bg,
-        border: Border(
-            top: header
-                ? BorderSide.none
-                : BorderSide(color: scheme.outlineVariant, width: 0.5)),
+        color: isTotal ? scheme.primary.withValues(alpha: 0.08) : null,
+        border: showDivider
+            ? Border(left: BorderSide(color: scheme.outlineVariant, width: 0.5))
+            : null,
       ),
-      padding:
-          const EdgeInsets.symmetric(horizontal: Spacing.md, vertical: 10),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            flex: 5,
-            child: Text(header ? cells[0].toUpperCase() : cells[0], style: style),
+          // Header cell.
+          Container(
+            width: double.infinity,
+            color: scheme.surfaceContainerHighest,
+            padding: const EdgeInsets.symmetric(
+                horizontal: Spacing.md, vertical: 8),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: context.text.labelSmall?.copyWith(
+                    color: isTotal ? scheme.primary : scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800)),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(cells[1],
-                textAlign: TextAlign.right, style: style),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(cells[2],
-                textAlign: TextAlign.right,
-                style: style?.copyWith(
-                    color: header || total
-                        ? color
-                        : scheme.onSurfaceVariant,
-                    fontWeight: total ? FontWeight.w800 : FontWeight.w500)),
+          // Value cell.
+          Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: Spacing.md, vertical: 12),
+            child: Text(value,
+                textAlign: TextAlign.center,
+                style: (isTotal
+                        ? context.text.titleSmall
+                        : context.text.bodyMedium)
+                    ?.copyWith(
+                        color: isTotal ? scheme.primary : scheme.onSurface,
+                        fontWeight: isTotal ? FontWeight.w800 : FontWeight.w700)),
           ),
         ],
       ),
     );
   }
 }
+
+/// Trim a trailing ".00" but keep meaningful decimals (e.g. 4.50).
+String _fmt(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);

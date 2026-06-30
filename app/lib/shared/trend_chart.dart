@@ -152,29 +152,29 @@ class _TrendChartState extends State<TrendChart> {
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    // Vertical labels need height, not width — reserve enough so
-                    // a rotated "Spring 2024" fully fits inside its column.
-                    reservedSize: 64,
+                    reservedSize: 52,
                     interval: 1,
                     getTitlesWidget: (v, meta) {
                       final i = v.toInt();
                       if (i < 0 || i >= widget.labels.length || v != i) {
                         return const SizedBox();
                       }
-                      // Rotate a full 90° (vertical) so edge labels stay within
-                      // their own column instead of angling off the chart's side.
+                      // Middle labels keep a gentle ~-30° angle (readable, no
+                      // overlap). Only the EDGE labels (first/last) go fully
+                      // vertical so they don't spill off the chart's sides.
+                      final isEdge = i == 0 || i == widget.labels.length - 1;
+                      final text = Text(widget.labels[i],
+                          maxLines: 1,
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface));
                       return SideTitleWidget(
                         axisSide: meta.axisSide,
                         space: 8,
-                        child: RotatedBox(
-                          quarterTurns: 3, // -90°: reads bottom-to-top
-                          child: Text(widget.labels[i],
-                              maxLines: 1,
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: scheme.onSurface)),
-                        ),
+                        child: isEdge
+                            ? RotatedBox(quarterTurns: 3, child: text)
+                            : Transform.rotate(angle: -0.5, child: text),
                       );
                     },
                   ),

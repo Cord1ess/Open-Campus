@@ -22,8 +22,11 @@ from app.schemas.student import (
     AcademicCalendar,
     AcademicCalendarResponse,
     CalendarEvent,
+    NoticeItem,
+    NoticesResponse,
 )
 from app.ucam.endpoints import academic_calendar as cal
+from app.ucam.endpoints import notices_uiu
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 log = logging.getLogger("open_campus.calendar")
@@ -101,3 +104,50 @@ async def academic_calendar(request: Request) -> AcademicCalendarResponse:
         _cache = _to_schema(calendars)
         _cached_at_monotonic = time.monotonic()
         return _cache
+
+
+# --- Public UIU notices (paginated) -----------------------------------------
+# Same public-data model as the calendar: cache per page with a short TTL so we
+# don't hit UIU on every scroll, but new notices still appear promptly.
+_NOTICES_TTL_SECONDS = 15 * 60  # 15 minutes
+_notices_lock = asyncio.Lock()
+_notices_cache: dict[int, tuple[float, NoticesResponse]] = {}
+
+
+@router.get("/notices/uiu", response_model=NoticesResponse)
+async def uiu_notices(request: Request, page: int = 1) -> NoticesResponse:
+    if not _rate.check(_client_ip(request)):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please slow down.",
+        )
+    page = max(1, page)
+    cached = _notices_cache.get(page)
+    if cached is not None and (time.monotonic() - cached[0]) < _NOTICES_TTL_SECONDS:
+        return cached[1]
+
+    async with _notices_lock:
+        cached = _notices_cache.get(page)
+        if cached is not None and (time.monotonic() - cached[0]) < _NOTICES_TTL_SECONDS:
+            return cached[1]
+        try:
+            result = await notices_uiu.fetch_notices(page)
+        except Exception as exc:  # noqa: BLE001 — never 500 on a scrape hiccup
+            log.warning("uiu notices fetch failed (page %s): %s", page, exc)
+            if cached is not None:
+                return cached[1]  # serve stale rather than fail
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Couldn't load notices right now.",
+            )
+        resp = NoticesResponse(
+            notices=[
+                NoticeItem(title=n.title, url=n.url, date_text=n.date_text)
+                for n in result.notices
+            ],
+            page=result.page,
+            total_pages=result.total_pages,
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+        )
+        _notices_cache[page] = (time.monotonic(), resp)
+        return resp

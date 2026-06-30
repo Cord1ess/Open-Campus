@@ -10,6 +10,7 @@ import '../academics/class_routine_page.dart';
 import '../academics/course_history_page.dart';
 import '../academics/exam_routine_page.dart';
 import '../academics/marks_page.dart';
+import '../academics/uiu_notices_page.dart';
 import '../dashboard/attendance_page.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_widgets.dart';
@@ -75,31 +76,29 @@ class AcademicsHub extends ConsumerWidget {
           ),
           HubFeature(
             icon: Icons.assignment_turned_in_outlined,
-            title: 'Marks',
+            title: 'Course Marks',
             subtitle: 'Item-wise marks per course',
             status: FeatureStatus.live,
             onTap: (c) =>
                 Navigator.of(c).push(sharedAxisRoute(const MarksPage())),
           ),
-          const HubFeature(
-            icon: Icons.description_outlined,
-            title: 'Transcript',
-            subtitle: 'Full academic transcript',
-          ),
-          const HubFeature(
-            icon: Icons.military_tech_outlined,
-            title: 'Degree Progress',
-            subtitle: 'Credits done & remaining',
+          HubFeature(
+            icon: Icons.grading_outlined,
+            title: 'Course Grades',
+            subtitle: 'Every course, grade & credit',
+            status: FeatureStatus.live,
+            onTap: (c) => Navigator.of(c)
+                .push(sharedAxisRoute(const CourseHistoryPage())),
           ),
         ]),
         HubGroup('Records', [
           HubFeature(
-            icon: Icons.history_edu_outlined,
-            title: 'Course History',
-            subtitle: 'All courses, grades, credits',
+            icon: Icons.campaign_outlined,
+            title: 'Notices',
+            subtitle: 'Latest UIU notices',
             status: FeatureStatus.live,
-            onTap: (c) => Navigator.of(c)
-                .push(sharedAxisRoute(const CourseHistoryPage())),
+            onTap: (c) =>
+                Navigator.of(c).push(sharedAxisRoute(const UiuNoticesPage())),
           ),
           HubFeature(
             icon: Icons.calendar_view_week_outlined,
@@ -149,6 +148,18 @@ class AcademicsHub extends ConsumerWidget {
             icon: Icons.groups_outlined,
             title: 'FYP Group',
             subtitle: 'Final-year project group',
+          ),
+        ]),
+        const HubGroup('Others', [
+          HubFeature(
+            icon: Icons.description_outlined,
+            title: 'Transcript',
+            subtitle: 'Full academic transcript',
+          ),
+          HubFeature(
+            icon: Icons.military_tech_outlined,
+            title: 'Degree Progress',
+            subtitle: 'Credits done & remaining',
           ),
         ]),
       ],

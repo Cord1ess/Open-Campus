@@ -254,3 +254,16 @@ class AcademicCalendar(BaseModel):
 class AcademicCalendarResponse(BaseModel):
     calendars: list[AcademicCalendar] = []
     fetched_at: str | None = None   # ISO timestamp of the server-side fetch
+
+
+class NoticeItem(BaseModel):
+    title: str
+    url: str
+    date_text: str | None = None
+
+
+class NoticesResponse(BaseModel):
+    notices: list[NoticeItem] = []
+    page: int = 1
+    total_pages: int = 1
+    fetched_at: str | None = None
