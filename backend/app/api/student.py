@@ -10,10 +10,12 @@ gentle "tap to re-login for latest" prompt rather than a hard 401 logout.
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Response, status
 
 from app.auth.deps import CurrentSession
+from app.config import settings
 from app.schemas.student import (
     AdvisingResponse,
     AttendanceResponse,
@@ -40,6 +42,16 @@ import httpx
 
 router = APIRouter(prefix="/student", tags=["student"])
 log = logging.getLogger("open_campus.student")
+
+# The avatar URL is read from UCAM's HTML, then we fetch it server-side. Pin it to
+# UCAM's own host so a tampered/MITM'd page can't turn the proxy into an SSRF that
+# fetches arbitrary internal/external URLs on our behalf.
+_UCAM_HOST = urlparse(settings.ucam_base_url).netloc.lower()
+
+
+def _is_ucam_url(url: str) -> bool:
+    p = urlparse(url)
+    return p.scheme in ("http", "https") and p.netloc.lower() == _UCAM_HOST
 
 
 def _handle_failure(exc: Exception) -> HTTPException:
@@ -72,6 +84,11 @@ async def get_avatar(session: CurrentSession) -> Response:
         raise _handle_failure(exc)
 
     if not summary.photo_url:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="No profile photo.")
+    # SSRF guard: only ever proxy a URL on UCAM's own host.
+    if not _is_ucam_url(summary.photo_url):
+        log.warning("avatar: refusing non-UCAM photo URL: %s", summary.photo_url)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="No profile photo.")
     try:

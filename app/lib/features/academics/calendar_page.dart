@@ -11,6 +11,7 @@ import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
 import 'calendar_model.dart';
 import 'google_calendar.dart';
+import 'ics_export.dart';
 
 /// Academic calendar — live from UIU (scraped server-side). Each term/program
 /// has its own calendar; events render as Material date cards you can tap to
@@ -72,6 +73,20 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open the link.')));
     }
+  }
+
+  /// Export the whole calendar as an .ics (download on web, OS hand-off on
+  /// mobile). The file is strictly RFC 5545–compliant so it imports cleanly into
+  /// Google Calendar / Apple / Outlook.
+  Future<void> _exportAll(List<CalendarEvent> events, String calName) async {
+    final ok = await exportIcs(events, calendarName: calName);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Calendar exported — open the .ics file to import it.'
+          : 'Couldn’t export here. Tap an event and use '
+              '“Add to Google Calendar” to add it directly.'),
+    ));
   }
 
   /// Bottom sheet with event details, reminder toggle, and add-to-Google.
@@ -232,11 +247,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () => _open(GoogleCalendar.icsDataUrl(
-                        cal.events,
-                        calendarName: calName)),
+                    onPressed: () => _exportAll(cal.events, calName),
                     icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                    label: const Text('Add all to Google Calendar'),
+                    label: const Text('Export calendar (.ics)'),
                   ),
                 ),
                 const SizedBox(height: Spacing.sm),

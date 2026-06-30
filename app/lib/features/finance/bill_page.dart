@@ -11,12 +11,26 @@ import 'bill_model.dart';
 
 /// Full bill: live balance hero + itemized charges and payments grouped by
 /// trimester. Data from /student/bill.
-class BillPage extends ConsumerWidget {
+class BillPage extends ConsumerStatefulWidget {
   const BillPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.read(billProvider.notifier).ensureLoaded();
+  ConsumerState<BillPage> createState() => _BillPageState();
+}
+
+class _BillPageState extends ConsumerState<BillPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Kick off the first fetch once, after mount — not in build() (which would
+    // re-fire on every rebuild and mutate a provider mid-build).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(billProvider.notifier).ensureLoaded();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(billProvider);
     return Scaffold(
       body: RefreshIndicator(
@@ -48,12 +62,15 @@ class BillPage extends ConsumerWidget {
   }
 }
 
+/// Thousands separator, compiled once (not per call — `bdt` runs many times per
+/// render of the bill page).
+final _thousands = RegExp(r'(\d)(?=(\d{3})+$)');
+
 String bdt(double? v, {bool signed = false}) {
   if (v == null) return '—';
   final neg = v < 0;
   final n = v.abs();
-  final s = n.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+  final s = n.toStringAsFixed(0).replaceAllMapped(_thousands, (m) => '${m[1]},');
   final sign = signed && neg ? '-' : '';
   return '$sign৳ $s';
 }

@@ -23,11 +23,12 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final fg = onAccent(accent); // readable text on the filled accent
     final bg = filled ? accent : scheme.surface;
-    final valueColor = filled ? Colors.white : scheme.onSurface;
+    final valueColor = filled ? fg : scheme.onSurface;
     final labelColor =
-        filled ? Colors.white.withValues(alpha: 0.85) : scheme.onSurfaceVariant;
-    final iconBg = filled ? Colors.white.withValues(alpha: 0.20) : accent;
+        filled ? fg.withValues(alpha: 0.85) : scheme.onSurfaceVariant;
+    final iconBg = filled ? fg.withValues(alpha: 0.20) : accent;
 
     return Container(
       padding: const EdgeInsets.all(Spacing.lg),
@@ -38,20 +39,32 @@ class StatTile extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-            child: Icon(icon, size: 16, color: Colors.white),
+            // Filled: icon chip is a translucent fg tint, so use fg. Unfilled:
+            // chip is the solid accent, so use the accent's readable foreground.
+            child: Icon(icon, size: 16, color: filled ? fg : onAccent(accent)),
           ),
           const SizedBox(height: Spacing.lg),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value,
-                maxLines: 1,
-                style: context.text.headlineSmall?.copyWith(
-                    color: valueColor, fontWeight: FontWeight.w800, height: 1.0)),
+          // Fixed-height value box: a FittedBox reports its child's UNSCALED
+          // intrinsic height, which under IntrinsicHeight overflowed the tile by
+          // ~2px. Pinning the height makes the intrinsic measurement exact and
+          // still lets long currency values scale down to fit the width.
+          SizedBox(
+            height: 30,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value,
+                  maxLines: 1,
+                  style: context.text.headlineSmall?.copyWith(
+                      color: valueColor,
+                      fontWeight: FontWeight.w800,
+                      height: 1.0)),
+            ),
           ),
           const SizedBox(height: 2),
           Text(label,

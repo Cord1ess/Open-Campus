@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_info.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/avatar.dart';
 import '../../shared/widgets.dart';
@@ -16,11 +17,15 @@ class ProfilePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
-    final roll = auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : '—';
     final homeState = ref.watch(homeProvider);
     final home =
         homeState is ResData<HomeSummary> ? homeState.loaded.data : null;
     final avatar = ref.watch(avatarProvider).value;
+    // Prefer the roll scraped from the home page; fall back to the auth roll
+    // (which is empty right after a restored session until home loads).
+    final authRoll =
+        auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : null;
+    final roll = home?.roll ?? authRoll ?? '—';
 
     return Scaffold(
       body: CustomScrollView(
@@ -48,10 +53,6 @@ class ProfilePage extends ConsumerWidget {
                 const SizedBox(height: Spacing.lg),
                 FadeSlideIn(delayMs: 60, child: _BioCard(home)),
               ],
-              if (home?.advisor?.name != null) ...[
-                const SizedBox(height: Spacing.lg),
-                FadeSlideIn(delayMs: 100, child: _AdvisorCard(home!.advisor!)),
-              ],
               const SizedBox(height: Spacing.lg),
               FadeSlideIn(
                 delayMs: 80,
@@ -73,27 +74,17 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: Spacing.lg),
               FadeSlideIn(
                 delayMs: 140,
-                child: Card(
-                  child: ListTile(
-                    leading: Icon(Icons.logout, color: context.scheme.error),
-                    title: Text('Log out',
-                        style: TextStyle(color: context.scheme.error)),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(Radii.lg)),
-                    onTap: () {
-                      // Pop any pushed routes (this Profile page lives on top of
-                      // the shell) so logout reveals the login screen, not a
-                      // stale page beneath.
-                      Navigator.of(context)
-                          .popUntil((route) => route.isFirst);
-                      ref.read(authControllerProvider.notifier).logout();
-                    },
-                  ),
-                ),
+                child: _LogoutCard(onLogout: () {
+                  // Pop any pushed routes (this Profile page lives on top of the
+                  // shell) so logout reveals the login screen, not a stale page.
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  ref.read(authControllerProvider.notifier).logout();
+                }),
               ),
               const SizedBox(height: Spacing.xl),
               Center(
-                child: Text('Open Campus · unofficial · v0.1',
+                child: Text(
+                    'Open Campus · unofficial · v${AppInfo.version} ${AppInfo.buildChannel}',
                     style: context.text.labelSmall
                         ?.copyWith(color: context.scheme.onSurfaceVariant)),
               ),
@@ -126,36 +117,52 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final avatar = avatarBytes;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.xl),
-        child: Row(
-          children: [
-            Avatar(bytes: avatar, radius: 34),
-            const SizedBox(width: Spacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(home?.name ?? 'Student',
-                      style: context.text.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                  Text(roll,
-                      style: context.text.bodyMedium
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-                  if (home?.currentTerm?.name != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(home!.currentTerm!.name!,
-                          style: context.text.labelMedium
-                              ?.copyWith(color: scheme.primary)),
-                    ),
-                ],
-              ),
+    final term = home?.currentTerm?.name;
+    return Container(
+      padding: const EdgeInsets.all(Spacing.xl),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(Radii.lg),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          Avatar(bytes: avatarBytes, radius: 44),
+          const SizedBox(height: Spacing.md),
+          Text(home?.name ?? 'Student',
+              textAlign: TextAlign.center,
+              style: context.text.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: Spacing.sm),
+          // ID badge — high-contrast pill so the student ID is clearly visible.
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: Spacing.md, vertical: 5),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(Radii.full),
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.badge_outlined,
+                    size: 14, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(roll,
+                    style: context.text.labelLarge?.copyWith(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5)),
+              ],
+            ),
+          ),
+          if (term != null) ...[
+            const SizedBox(height: Spacing.sm),
+            Text(term,
+                style: context.text.labelMedium
+                    ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -167,73 +174,35 @@ class _BioCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rows = <(IconData, String, String)>[
+      if (home.dob != null) (Icons.cake_outlined, 'Date of birth', home.dob!),
+      if (home.bloodGroup != null)
+        (Icons.bloodtype_outlined, 'Blood group', home.bloodGroup!),
+      if (home.phone != null) (Icons.phone_outlined, 'Phone', home.phone!),
+      if (home.fatherName != null)
+        (Icons.man_outlined, 'Father', home.fatherName!),
+      if (home.motherName != null)
+        (Icons.woman_outlined, 'Mother', home.motherName!),
+    ];
     return SectionCard(
       title: 'Personal',
       icon: Icons.badge_outlined,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (home.dob != null) _InfoRow(Icons.cake_outlined, 'Date of birth', home.dob!),
-          if (home.bloodGroup != null)
-            _InfoRow(Icons.bloodtype_outlined, 'Blood group', home.bloodGroup!),
-          if (home.phone != null)
-            _InfoRow(Icons.phone_outlined, 'Phone', home.phone!),
-          if (home.fatherName != null)
-            _InfoRow(Icons.man_outlined, 'Father', home.fatherName!),
-          if (home.motherName != null)
-            _InfoRow(Icons.woman_outlined, 'Mother', home.motherName!),
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0)
+              Divider(height: Spacing.lg, color: context.scheme.outlineVariant),
+            _InfoRow(rows[i].$1, rows[i].$2, rows[i].$3),
+          ],
         ],
       ),
     );
   }
 }
 
-class _AdvisorCard extends StatelessWidget {
-  final Advisor advisor;
-  const _AdvisorCard(this.advisor);
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SectionCard(
-      title: 'Academic advisor',
-      icon: Icons.support_agent_outlined,
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: scheme.secondaryContainer,
-            child: Text(advisor.initial ?? '?',
-                style: context.text.titleMedium?.copyWith(
-                    color: scheme.onSecondaryContainer,
-                    fontWeight: FontWeight.w800)),
-          ),
-          const SizedBox(width: Spacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(advisor.name ?? '—',
-                    style: context.text.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                if (advisor.room != null)
-                  Text('Room ${advisor.room}',
-                      style: context.text.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-                if (advisor.email != null)
-                  Text(advisor.email!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.text.bodySmall
-                          ?.copyWith(color: scheme.primary)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// One personal-info line: an icon, a fixed-width label, then the value — the
+/// fixed label column keeps every value left-aligned in a clean second column.
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -243,24 +212,55 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: scheme.onSurfaceVariant),
-          const SizedBox(width: Spacing.md),
-          Text(label,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 18, color: scheme.primary),
+        const SizedBox(width: Spacing.md),
+        SizedBox(
+          width: 96,
+          child: Text(label,
               style: context.text.bodyMedium
                   ?.copyWith(color: scheme.onSurfaceVariant)),
-          const Spacer(),
-          Flexible(
-            child: Text(value,
-                textAlign: TextAlign.right,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-          ),
-        ],
+        ),
+        const SizedBox(width: Spacing.sm),
+        Expanded(
+          child: Text(value,
+              overflow: TextOverflow.ellipsis,
+              style: context.text.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Bordered logout card matching the unified card look.
+class _LogoutCard extends StatelessWidget {
+  final VoidCallback onLogout;
+  const _LogoutCard({required this.onLogout});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return SpringTap(
+      onTap: onLogout,
+      borderRadius: BorderRadius.circular(Radii.lg),
+      child: Container(
+        padding: const EdgeInsets.all(Spacing.lg),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.logout, size: 20, color: scheme.error),
+            const SizedBox(width: Spacing.md),
+            Text('Log out',
+                style: context.text.titleMedium?.copyWith(color: scheme.error)),
+          ],
+        ),
       ),
     );
   }

@@ -114,6 +114,75 @@ class AcademicCalendar {
     }
     return null;
   }
+
+  /// The next [n] upcoming events (ranges not yet over), in date order.
+  List<CalendarEvent> nextEvents(int n) {
+    final out = <CalendarEvent>[];
+    for (final e in events) {
+      if (!e.isPast) {
+        out.add(e);
+        if (out.length >= n) break;
+      }
+    }
+    return out;
+  }
+
+  /// Tuition installment deadlines for this term, in date order (1st, 2nd, 3rd…).
+  /// Detected from payment-type events whose text mentions an installment.
+  /// Events are already date-sorted, so this preserves chronological order.
+  List<InstallmentDeadline> get installmentDeadlines {
+    final out = <InstallmentDeadline>[];
+    for (final e in events) {
+      if (e.type != CalendarEventType.payment) continue;
+      final t = e.title.toLowerCase();
+      if (!t.contains('installment') && !t.contains('instalment')) continue;
+      // The deadline is the END of the range if it's a span, else the single date.
+      out.add(InstallmentDeadline(
+        ordinal: out.length + 1,
+        deadline: e.endDate ?? e.date,
+        title: e.title,
+        dateText: e.dateText,
+      ));
+    }
+    return out;
+  }
+
+  /// The installment currently being counted down to: the first whose deadline
+  /// hasn't passed. Returns null if there are none, or all have passed.
+  /// As each deadline passes (midnight after it), the next one becomes active
+  /// automatically — 1st → 2nd → 3rd.
+  InstallmentDeadline? get activeInstallment {
+    final n = DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    for (final d in installmentDeadlines) {
+      // Active while the deadline day itself hasn't fully passed.
+      if (!d.deadline.isBefore(today)) return d;
+    }
+    return null;
+  }
+}
+
+/// A single tuition installment deadline, derived from the academic calendar.
+class InstallmentDeadline {
+  final int ordinal; // 1, 2, 3 — order within the term
+  final DateTime deadline; // the last day to pay
+  final String title; // raw calendar event text
+  final String dateText; // e.g. "Jul 6, 2026"
+
+  const InstallmentDeadline({
+    required this.ordinal,
+    required this.deadline,
+    required this.title,
+    required this.dateText,
+  });
+
+  /// "1st", "2nd", "3rd", "4th"…
+  String get ordinalLabel {
+    if (ordinal == 1) return '1st';
+    if (ordinal == 2) return '2nd';
+    if (ordinal == 3) return '3rd';
+    return '${ordinal}th';
+  }
 }
 
 class AcademicCalendarData {

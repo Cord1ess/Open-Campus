@@ -17,6 +17,10 @@ class Springs {
       SpringDescription.withDampingRatio(mass: 1, stiffness: 700, ratio: 0.8);
   static final spatialSlow =
       SpringDescription.withDampingRatio(mass: 1, stiffness: 380, ratio: 0.8);
+  // Entrance: softer + slightly heavier than spatialSlow so the slide-up travels
+  // a longer, clearly visible distance and settles smoothly (a touch of bounce).
+  static final entrance =
+      SpringDescription.withDampingRatio(mass: 1.1, stiffness: 260, ratio: 0.82);
 
   // Effects — critically damped (ratio 1) → smooth, no overshoot.
   static final effectsFast =
@@ -34,13 +38,22 @@ extension SpringDrive on AnimationController {
   }
 }
 
-/// Entrance: fade + spring-slide up. The slide uses a real spring so it settles
-/// with a subtle, expressive bounce rather than a linear ease.
+/// Entrance: a prominent, smooth spring-slide UP. The element starts well below
+/// its resting position and travels up on a soft spring so the SLIDE is the
+/// motion you notice — not a fade. Opacity ramps in quickly (resolving early in
+/// the travel) so the content is clearly visible while it's still moving, rather
+/// than fading in at the end.
 class SpringIn extends StatefulWidget {
   final Widget child;
   final int delayMs;
+
+  /// Slide distance as a fraction of [_travelPx]. Larger = more pronounced rise.
   final double dy;
-  const SpringIn({super.key, required this.child, this.delayMs = 0, this.dy = 0.16});
+  const SpringIn({super.key, required this.child, this.delayMs = 0, this.dy = 1.0});
+
+  /// Base upward travel in logical pixels at dy == 1.0. Generous so the slide
+  /// reads clearly as movement.
+  static const double _travelPx = 64;
 
   @override
   State<SpringIn> createState() => _SpringInState();
@@ -50,14 +63,19 @@ class _SpringInState extends State<SpringIn>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c =
       AnimationController.unbounded(vsync: this, value: 0);
+  // Once the entrance settles we drop the AnimatedBuilder/Opacity/Transform
+  // wrappers entirely and render the plain child — so finished items add ZERO
+  // per-frame cost (Opacity in particular is expensive to keep around).
+  bool _done = false;
 
   @override
   void initState() {
     super.initState();
     Future.delayed(Duration(milliseconds: widget.delayMs), () {
-      // Softer spring → the entrance is slower and clearly visible (fluid),
-      // settling with a gentle, premium bounce rather than snapping in.
-      if (mounted) _c.springTo(1, Springs.spatialSlow);
+      if (!mounted) return;
+      _c.springTo(1, Springs.entrance).whenCompleteOrCancel(() {
+        if (mounted && !_done) setState(() => _done = true);
+      });
     });
   }
 
@@ -69,14 +87,20 @@ class _SpringInState extends State<SpringIn>
 
   @override
   Widget build(BuildContext context) {
+    if (_done) return widget.child; // settled → no animation overhead
     return AnimatedBuilder(
       animation: _c,
       builder: (_, child) {
         final t = _c.value;
+        if (t >= 1.0) return child!; // fully settled this frame
+        // Opacity resolves early (by ~40% of the travel) so the content is
+        // visible during the slide — the rise, not the fade, is the motion.
+        final opacity = (t * 2.5).clamp(0.0, 1.0);
+        final offsetY = (1 - t.clamp(0.0, 1.0)) * widget.dy * SpringIn._travelPx;
         return Opacity(
-          opacity: t.clamp(0.0, 1.0),
+          opacity: opacity,
           child: Transform.translate(
-            offset: Offset(0, (1 - t) * widget.dy * 120),
+            offset: Offset(0, offsetY),
             child: child,
           ),
         );
@@ -186,32 +210,16 @@ class CountUp extends StatelessWidget {
   }
 }
 
-/// Staggered list: wraps children so each springs in with an increasing delay.
-class StaggerList extends StatelessWidget {
-  final List<Widget> children;
-  final int stepMs;
-  final int baseMs;
-  const StaggerList(
-      {super.key, required this.children, this.stepMs = 55, this.baseMs = 0});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var i = 0; i < children.length; i++)
-          SpringIn(delayMs: baseMs + i * stepMs, child: children[i]),
-      ],
-    );
-  }
-}
-
-/// Card → detail navigation route.
+/// Card → detail navigation route — used for EVERY page push so the whole app
+/// has one consistent motion: the incoming page slides in from the right and
+/// fades in; the outgoing page drifts slightly left and dims. Reverse plays it
+/// backwards (page slides back out to the right).
 ///
-/// On Android it defers to the app's [PageTransitionsTheme] so the system's
-/// **predictive back** gesture (Android 14+) drives the transition — dragging
-/// back peeks/animates the page away natively. On every other platform it uses
-/// a shared-axis (X) transition: the incoming page slides in from the right and
-/// fades in; the outgoing page drifts left and dims.
+/// The same horizontal transition is used on every platform, including Android.
+/// Android's **predictive-back gesture** still works: the system drives this
+/// route's [animation] in reverse as you swipe, so the page is dragged back
+/// along the same horizontal axis (we just don't use the native vertical peek,
+/// keeping motion identical to the rest of the app).
 Route<T> sharedAxisRoute<T>(Widget page) => _SharedAxisRoute<T>(page);
 
 class _SharedAxisRoute<T> extends PageRouteBuilder<T> {
@@ -227,14 +235,9 @@ class _SharedAxisRoute<T> extends PageRouteBuilder<T> {
   @override
   Widget buildTransitions(BuildContext context, Animation<double> animation,
       Animation<double> secondaryAnimation, Widget child) {
-    // Android: let the theme's transition (PredictiveBackPageTransitionsBuilder)
-    // handle it so the predictive back gesture is honored.
-    if (Theme.of(context).platform == TargetPlatform.android) {
-      final builder = Theme.of(context).pageTransitionsTheme;
-      return builder.buildTransitions<T>(
-          this, context, animation, secondaryAnimation, child);
-    }
-    // Elsewhere: the custom shared-axis look.
+    // One shared-axis (X) look on all platforms. `animation` runs forward on
+    // push and in reverse under the predictive-back swipe, so the gesture drags
+    // the page back along this same horizontal axis.
     const inCurve = Cubic(0.05, 0.7, 0.1, 1.0); // emphasized decelerate
     final entering = CurvedAnimation(parent: animation, curve: inCurve);
     final leaving = CurvedAnimation(parent: secondaryAnimation, curve: inCurve);

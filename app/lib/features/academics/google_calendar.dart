@@ -2,22 +2,37 @@ import 'dart:convert';
 
 import 'calendar_model.dart';
 
-/// Builds Google Calendar "add event" template URLs.
+/// Builds Google Calendar "add event" links and strictly RFC 5545–compliant
+/// iCalendar (.ics) documents for the academic calendar.
 ///
-/// Single events open the prefilled event-creation dialog. Since the academic
-/// calendar entries are all-day, we use Google's all-day date format
-/// (YYYYMMDD/YYYYMMDD) where the END date is EXCLUSIVE — so a one-day event on
-/// the 6th is `20260706/20260707`, and a range 4–6 is `20260704/20260707`.
+/// All academic-calendar entries are ALL-DAY, so we use the date-only value form
+/// (`VALUE=DATE`, `YYYYMMDD`) where the END date is EXCLUSIVE — a one-day event
+/// on the 6th is `20260706`→`20260707`; a range 4–6 is `20260704`→`20260707`.
 class GoogleCalendar {
+  // ICS lines MUST be CRLF-terminated (RFC 5545 §3.1). LF-only output is the
+  // most common reason calendar apps reject a file with "unable to launch".
+  static const _crlf = '\r\n';
+
   static String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}'
       '${d.month.toString().padLeft(2, '0')}'
       '${d.day.toString().padLeft(2, '0')}';
 
-  /// A link that adds a single [event] to the user's Google Calendar.
+  /// UTC timestamp in iCalendar form (`YYYYMMDDTHHMMSSZ`). Used for DTSTAMP,
+  /// which is REQUIRED on every VEVENT.
+  static String _dtStamp(DateTime now) {
+    final u = now.toUtc();
+    return '${_ymd(u)}T'
+        '${u.hour.toString().padLeft(2, '0')}'
+        '${u.minute.toString().padLeft(2, '0')}'
+        '${u.second.toString().padLeft(2, '0')}Z';
+  }
+
+  /// A link that adds a single [event] to the user's Google Calendar. This is a
+  /// plain `https://` URL (the most reliable cross-platform path — it just opens
+  /// Google Calendar with the event prefilled, no file handling needed).
   static String eventUrl(CalendarEvent e, {String? calendarName}) {
     final start = e.date;
-    // End is exclusive for all-day events → day after the (inclusive) end.
     final inclusiveEnd = e.endDate ?? e.date;
     final exclusiveEnd = inclusiveEnd.add(const Duration(days: 1));
 
@@ -35,54 +50,82 @@ class GoogleCalendar {
       'details': details.toString(),
     };
     final query = params.entries
-        .map((p) =>
-            '${p.key}=${Uri.encodeQueryComponent(p.value)}')
+        .map((p) => '${p.key}=${Uri.encodeQueryComponent(p.value)}')
         .join('&');
     return 'https://calendar.google.com/calendar/render?$query';
   }
 
-  /// An iCalendar (.ics) document containing ALL [events] — the standard way to
-  /// import a whole calendar into Google Calendar (or Apple/Outlook) in one go.
-  static String icsFor(List<CalendarEvent> events, {String? calendarName}) {
-    final b = StringBuffer()
-      ..writeln('BEGIN:VCALENDAR')
-      ..writeln('VERSION:2.0')
-      ..writeln('PRODID:-//Open Campus//Academic Calendar//EN')
-      ..writeln('CALSCALE:GREGORIAN')
-      ..writeln('METHOD:PUBLISH');
-    if (calendarName != null) {
-      b.writeln('X-WR-CALNAME:${_esc(calendarName)}');
-    }
+  /// A strictly RFC 5545–compliant iCalendar document containing ALL [events] —
+  /// the standard way to import a whole calendar into Google / Apple / Outlook.
+  static String icsFor(List<CalendarEvent> events, {String? calendarName,
+      DateTime? stampNow}) {
+    // A single fixed stamp for the whole document (passed in so callers can keep
+    // it deterministic; defaults to now).
+    final stamp = _dtStamp(stampNow ?? DateTime.now());
+    final lines = <String>[
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Open Campus//Academic Calendar//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      if (calendarName != null) 'X-WR-CALNAME:${_esc(calendarName)}',
+    ];
+
     for (final e in events) {
       final start = e.date;
       final exclusiveEnd = (e.endDate ?? e.date).add(const Duration(days: 1));
-      b
-        ..writeln('BEGIN:VEVENT')
-        ..writeln('UID:${e.notificationId}@opencampus')
-        ..writeln('DTSTART;VALUE=DATE:${_ymd(start)}')
-        ..writeln('DTEND;VALUE=DATE:${_ymd(exclusiveEnd)}')
-        ..writeln('SUMMARY:${_esc(e.title)}');
+      lines
+        ..add('BEGIN:VEVENT')
+        ..add('UID:${e.notificationId}@opencampus')
+        ..add('DTSTAMP:$stamp')
+        ..add('DTSTART;VALUE=DATE:${_ymd(start)}')
+        ..add('DTEND;VALUE=DATE:${_ymd(exclusiveEnd)}')
+        ..add('SUMMARY:${_esc(e.title)}');
       if (e.detail != null && e.detail!.isNotEmpty) {
-        b.writeln('DESCRIPTION:${_esc('Day: ${e.detail}')}');
+        lines.add('DESCRIPTION:${_esc('Day: ${e.detail}')}');
       }
-      b.writeln('END:VEVENT');
+      lines.add('END:VEVENT');
     }
-    b.writeln('END:VCALENDAR');
-    return b.toString();
+    lines.add('END:VCALENDAR');
+
+    // Fold each content line to <=75 octets and join with CRLF (RFC 5545 §3.1).
+    return lines.map(_fold).join(_crlf) + _crlf;
   }
 
-  /// A `data:` URL wrapping the .ics so it can be opened/downloaded without a
-  /// backend. Works on web (downloads) and mobile (opens the calendar import).
-  static String icsDataUrl(List<CalendarEvent> events, {String? calendarName}) {
-    final ics = icsFor(events, calendarName: calendarName);
-    final b64 = base64Encode(utf8.encode(ics));
-    return 'data:text/calendar;base64,$b64';
-  }
-
-  /// Escape per RFC 5545 (commas, semicolons, newlines, backslashes).
+  /// Escape a TEXT value per RFC 5545 §3.3.11 (backslash, comma, semicolon, and
+  /// newlines — CR is dropped, LF becomes the literal `\n`).
   static String _esc(String s) => s
-      .replaceAll(r'\', r'\\')
-      .replaceAll(',', r'\,')
-      .replaceAll(';', r'\;')
-      .replaceAll('\n', r'\n');
+      .replaceAll('\\', '\\\\')
+      .replaceAll(',', '\\,')
+      .replaceAll(';', '\\;')
+      .replaceAll('\r\n', '\\n')
+      .replaceAll('\r', '\\n')
+      .replaceAll('\n', '\\n');
+
+  /// Fold a content line to a max of 75 OCTETS per line, continuation lines
+  /// starting with a single space (RFC 5545 §3.1). We fold on UTF-8 byte
+  /// boundaries so multi-byte characters are never split.
+  static String _fold(String line) {
+    final bytes = utf8.encode(line);
+    if (bytes.length <= 75) return line;
+    final out = StringBuffer();
+    var i = 0;
+    var first = true;
+    while (i < bytes.length) {
+      // First line: up to 75 bytes. Continuations: 1 leading space + up to 74.
+      final limit = first ? 75 : 74;
+      var end = (i + limit).clamp(0, bytes.length);
+      // Don't split a multi-byte UTF-8 sequence: back up off continuation bytes
+      // (0b10xxxxxx) until we're at a code-point boundary.
+      while (end > i && end < bytes.length && (bytes[end] & 0xC0) == 0x80) {
+        end--;
+      }
+      final chunk = utf8.decode(bytes.sublist(i, end));
+      if (!first) out.write('$_crlf ');
+      out.write(chunk);
+      i = end;
+      first = false;
+    }
+    return out.toString();
+  }
 }

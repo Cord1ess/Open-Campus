@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_page.dart';
 import '../hubs/academics_hub.dart';
@@ -56,22 +55,15 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 720;
 
-    final body = AnimatedSwitcher(
-      duration: Motion.medium,
-      switchInCurve: Motion.emphasizedDecelerate,
-      transitionBuilder: (child, anim) => FadeTransition(
-        opacity: anim,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.015), end: Offset.zero)
-              .animate(anim),
-          child: child,
-        ),
-      ),
-      // Center + cap content width so pages don't stretch on desktop/tablet.
-      child: KeyedSubtree(
-        key: ValueKey(_index),
-        child: _MaxWidth(child: _pages[_index]),
-      ),
+    // IndexedStack keeps all four tabs alive, so switching tabs preserves each
+    // page's scroll position and loaded data instead of rebuilding (and
+    // re-fetching) it every visit. Content width is capped per page.
+    final body = IndexedStack(
+      index: _index,
+      sizing: StackFit.expand,
+      children: [
+        for (final page in _pages) _MaxWidth(child: page),
+      ],
     );
 
     if (wide) {

@@ -15,8 +15,9 @@ import logging
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
+from app.auth.rate_limit import SlidingWindowLimiter
 from app.schemas.student import (
     AcademicCalendar,
     AcademicCalendarResponse,
@@ -26,6 +27,18 @@ from app.ucam.endpoints import academic_calendar as cal
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 log = logging.getLogger("open_campus.calendar")
+
+# Public (no auth) and cached, but cap per-IP rate so one client can't hammer it.
+# Generous: 60/min is far above real usage (the app fetches it once per launch).
+_rate = SlidingWindowLimiter(max_events=60, window_seconds=60)
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
 
 _CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours
 _lock = asyncio.Lock()
@@ -59,8 +72,13 @@ def _to_schema(calendars: list[cal.Calendar]) -> AcademicCalendarResponse:
 
 
 @router.get("/academic", response_model=AcademicCalendarResponse)
-async def academic_calendar() -> AcademicCalendarResponse:
+async def academic_calendar(request: Request) -> AcademicCalendarResponse:
     global _cache, _cached_at_monotonic
+    if not _rate.check(_client_ip(request)):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please slow down.",
+        )
     now = time.monotonic()
     if _cache is not None and (now - _cached_at_monotonic) < _CACHE_TTL_SECONDS:
         return _cache

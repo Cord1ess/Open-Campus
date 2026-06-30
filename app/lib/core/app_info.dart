@@ -2,7 +2,7 @@
 /// pubspec.yaml on each release.
 class AppInfo {
   static const name = 'Open Campus';
-  static const version = '0.1.0';
+  static const version = '0.2.0';
   static const buildChannel = 'Beta';
 
   /// Public source / releases. Update-checking and "what's new" point here.

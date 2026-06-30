@@ -61,6 +61,12 @@ extension StatusX on BuildContext {
   TextTheme get text => Theme.of(this).textTheme;
 }
 
+/// Readable foreground (white or near-black) for text/icons drawn ON TOP of an
+/// arbitrary accent fill. Used by filled accent tiles so they stay legible no
+/// matter which seed/accent is active (a light accent gets dark text).
+Color onAccent(Color accent) =>
+    accent.computeLuminance() > 0.55 ? const Color(0xFF14181F) : Colors.white;
+
 /// 4-pt spacing scale.
 class Spacing {
   static const xs = 4.0;
@@ -154,10 +160,10 @@ class AppTheme {
         titleTextStyle: base.textTheme.titleLarge?.copyWith(
             color: scheme.onSurface, fontWeight: FontWeight.w600),
       ),
-      // White cards with a hairline border (clean, reference-style) — color is
-      // reserved for deliberate accent cards, not the default card surface.
+      // White cards with a hairline border (clean, reference-style) — matches
+      // SectionCard / the dashboard cards so every surface reads identically.
       cardTheme: CardThemeData(
-        color: scheme.surfaceContainerLow,
+        color: scheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(

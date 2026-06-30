@@ -18,19 +18,27 @@ so nothing is hard-coded beyond "Total Class"/"Present"/"Out of".
 """
 from __future__ import annotations
 
+import logging
 import re
 
+import httpx
 from selectolax.parser import HTMLParser
 
 from app.schemas.student import CourseMarks, MarkComponent
-from app.ucam.client import UcamSession
+from app.ucam.client import UcamError, UcamSession, UcamSessionExpired
 from app.ucam.navigator import fetch_page, resolve_page_url
 from app.ucam.postback import postback, select_options
+
+log = logging.getLogger("open_campus.marks")
 
 _PANEL = "ctl00_MainContainer_pnStudentMarkDisEntryView"
 _PATH = "/Result/ItemWiseDetailsMarksForStudent.aspx"
 _DDL_TRIMESTER = "ctl00$MainContainer$ddlAcaCalBatch"
 _DDL_COURSE = "ctl00$MainContainer$ddlCourse"
+
+# Precompiled (these run once per mark component per course — hundreds per load).
+_NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
+_LABEL_MAX_RE = re.compile(r"\s*(.*?)\s*\(\s*([\d.]+)\s*\)\s*$")
 
 
 async def fetch_trimester_options(session: UcamSession) -> list[tuple[str, str]]:
@@ -43,7 +51,14 @@ async def fetch_marks_for_trimester(
     session: UcamSession, trimester_value: str
 ) -> list[CourseMarks]:
     """Drive the cascade for ONE trimester: select it (postback) to populate the
-    course list, then select each course (postback) to read its marks panel."""
+    course list, then select each course (postback) to read its marks panel.
+
+    This is N+1 UCAM postbacks, so the result is cached on the session for its
+    lifetime — re-opening the same trimester returns instantly."""
+    cached = session._marks_cache.get(trimester_value)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
     page_url = (await resolve_page_url(session, _PATH)) or _PATH
     base_html = await fetch_page(session, _PATH)
 
@@ -64,24 +79,29 @@ async def fetch_marks_for_trimester(
                 event_target=_DDL_COURSE, control_name=_DDL_COURSE,
                 value=value,
             )
-        except Exception:
+        except (UcamError, UcamSessionExpired, httpx.HTTPError) as exc:
+            # One course failing shouldn't sink the whole trimester — skip it,
+            # but log so a systemic break is visible rather than silent.
+            log.warning("marks: course %r postback failed: %s", label, exc)
             continue
         cm = parse_course_marks(html, course_label=label)
         if cm.has_marks:
             results.append(cm)
+
+    session._marks_cache[trimester_value] = results
     return results
 
 
 def _num(s: str | None) -> float | None:
     if not s:
         return None
-    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    m = _NUM_RE.search(s)
     return float(m.group(0)) if m else None
 
 
 def _split_label_max(text: str) -> tuple[str, float | None]:
     """'Attendance(5.00)' -> ('Attendance', 5.0). 'Best 2 (Two)' -> ('Best 2', None)."""
-    m = re.match(r"\s*(.*?)\s*\(\s*([\d.]+)\s*\)\s*$", text)
+    m = _LABEL_MAX_RE.match(text)
     if m:
         return m.group(1).strip(), float(m.group(2))
     return text.strip(), None

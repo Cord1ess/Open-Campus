@@ -8,6 +8,9 @@ import '../dashboard/resource_view.dart';
 import '../common/collapsing_title.dart';
 import 'marks_model.dart';
 
+/// Strips a leading "[261] " term code from a trimester label. Compiled once.
+final _termCodePrefix = RegExp(r'^\[(\d+)\]\s*');
+
 /// Item-wise marks: pick a trimester, then see each course's assessment
 /// breakdown (attendance, class tests, assignment, midterm, …) with progress
 /// bars. Data from /student/marks (driven cascade — slower, so on demand).
@@ -105,7 +108,7 @@ class _TrimesterPicker extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 // Show the bracketed term label, e.g. "[261] Spring 2026".
-                o.label.replaceFirst(RegExp(r'^\[(\d+)\]\s*'), ''),
+                o.label.replaceFirst(_termCodePrefix, ''),
                 style: context.text.labelLarge?.copyWith(
                   color: sel ? scheme.onPrimary : scheme.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
@@ -281,17 +284,19 @@ class _ComponentRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: comp.ratio.toDouble()),
-            duration: Motion.slow,
-            curve: Motion.emphasized,
-            builder: (_, v, __) => LinearProgressIndicator(
-              value: v,
-              minHeight: 6,
-              backgroundColor: scheme.surfaceContainerHighest,
-              valueColor: AlwaysStoppedAnimation(scheme.primary),
+        RepaintBoundary(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: comp.ratio.toDouble()),
+              duration: Motion.slow,
+              curve: Motion.emphasized,
+              builder: (_, v, __) => LinearProgressIndicator(
+                value: v,
+                minHeight: 6,
+                backgroundColor: scheme.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation(scheme.primary),
+              ),
             ),
           ),
         ),

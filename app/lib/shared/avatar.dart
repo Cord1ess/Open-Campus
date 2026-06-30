@@ -16,6 +16,14 @@ class Avatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final size = radius * 2;
+    final hasImage = bytes != null && bytes!.isNotEmpty;
+    // Decode the photo at display resolution (not full UCAM resolution) so a
+    // large profile JPEG doesn't sit in memory as a multi-MB bitmap to draw a
+    // ~44px circle. cacheWidth/Height are in physical pixels, hence the DPR.
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final decodePx = (size * dpr).round();
+    // Convert to Uint8List once here rather than per Image build.
+    final imageBytes = hasImage ? Uint8List.fromList(bytes!) : null;
     return Container(
       width: size,
       height: size,
@@ -30,14 +38,16 @@ class Avatar extends StatelessWidget {
           ),
         ],
       ),
-      child: (bytes == null || bytes!.isEmpty)
+      child: (!hasImage)
           ? Icon(Icons.person,
               size: radius * 1.0, color: scheme.onPrimaryContainer)
           : ClipOval(
               child: Image.memory(
-                Uint8List.fromList(bytes!),
+                imageBytes!,
                 width: size,
                 height: size,
+                cacheWidth: decodePx,
+                cacheHeight: decodePx,
                 fit: BoxFit.cover,
                 alignment: Alignment.topCenter, // faces sit a touch high
                 gaplessPlayback: true,

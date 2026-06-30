@@ -106,6 +106,10 @@ class UcamSession:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _last_request_at: float = field(default=0.0, repr=False)
     _nav_cache: dict[str, str] = field(default_factory=dict, repr=False)
+    # Per-trimester item-wise marks, cached for this session's lifetime. Driving
+    # the marks cascade is N+1 UCAM postbacks, so we don't re-walk it if the app
+    # re-opens the same trimester. Keyed by trimester value -> parsed courses.
+    _marks_cache: dict[str, object] = field(default_factory=dict, repr=False)
 
     async def throttle(self) -> None:
         """Acquire a turn and wait until enough time has passed since the last
@@ -400,9 +404,18 @@ async def login(student_id: str, password: str) -> UcamSession:
 
     roll, how = _extract_roll(home_resp.text)
     if roll is None:
-        roll = student_id
-        log.warning("login: could not scrape roll from landing page; using typed id")
-    elif how in ("digit_fallback",):
+        # The roll is the TRUSTED identity for every data call. If we can't read
+        # it from the authenticated landing page, falling back to the typed id
+        # would mean trusting client-supplied input — refuse rather than risk
+        # serving data under an unverified identity. (Usually means UCAM changed
+        # the landing-page layout; operators should see this and update _extract_roll.)
+        await client.aclose()
+        log.error("login: could not scrape roll from landing page; refusing login")
+        raise UcamLoginError(
+            "Logged in, but couldn't read your student ID from the portal. "
+            "Please try again shortly."
+        )
+    if how == "digit_fallback":
         log.warning("login: roll matched only via brittle fallback (%s)", how)
 
     if dbg is not None:

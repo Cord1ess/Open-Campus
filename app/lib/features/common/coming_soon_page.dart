@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import 'collapsing_title.dart';
 
 /// The UCAM portal entry point. Unmapped features deep-link here (login page);
 /// the student continues in the browser.
@@ -29,42 +30,45 @@ class ComingSoonPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: SpringIn(
-          child: Padding(
-            padding: const EdgeInsets.all(Spacing.xxl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    color: scheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(Radii.xl),
+      body: CollapsingTitleScrollView(
+        title: title,
+        slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: SpringIn(
+                child: Padding(
+                  padding: const EdgeInsets.all(Spacing.xxl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          color: scheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(Radii.xl),
+                        ),
+                        child: Icon(icon,
+                            size: 44, color: scheme.onSecondaryContainer),
+                      ),
+                      const SizedBox(height: Spacing.xl),
+                      Text('Coming soon',
+                          style: context.text.titleMedium
+                              ?.copyWith(color: scheme.onSurfaceVariant)),
+                      const SizedBox(height: Spacing.xl),
+                      FilledButton.icon(
+                        onPressed: () => openUcam(context),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('Open in UCAM'),
+                      ),
+                    ],
                   ),
-                  child:
-                      Icon(icon, size: 44, color: scheme.onSecondaryContainer),
                 ),
-                const SizedBox(height: Spacing.xl),
-                Text(title,
-                    textAlign: TextAlign.center,
-                    style: context.text.headlineSmall),
-                const SizedBox(height: Spacing.sm),
-                Text('Coming soon',
-                    style: context.text.titleMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-                const SizedBox(height: Spacing.xl),
-                FilledButton.icon(
-                  onPressed: () => openUcam(context),
-                  icon: const Icon(Icons.open_in_new, size: 18),
-                  label: const Text('Open in UCAM'),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

@@ -104,14 +104,15 @@ class _TrendChartState extends State<TrendChart> {
               strokeWidth: 2),
         ),
         belowBarData: BarAreaData(
-          // Only fill under the line when a single series is shown — with two,
-          // overlapping fills muddy the chart.
-          show: _activeCount() == 1,
+          // Always fill from the line down to the baseline with a soft gradient.
+          // Use a lighter top alpha when two series overlap so the fills don't
+          // muddy each other; a touch stronger when a single line is shown.
+          show: true,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              s.color.withValues(alpha: 0.20),
+              s.color.withValues(alpha: _activeCount() == 1 ? 0.22 : 0.12),
               s.color.withValues(alpha: 0.0),
             ],
           ),
@@ -122,7 +123,9 @@ class _TrendChartState extends State<TrendChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
+        // Isolate the chart's draw-in animation so it doesn't repaint the page.
+        RepaintBoundary(
+        child: SizedBox(
           height: widget.height,
           child: LineChart(
             // Animate the line drawing in (and re-animate when toggling series)
@@ -212,6 +215,7 @@ class _TrendChartState extends State<TrendChart> {
               lineBarsData: bars,
             ),
           ),
+        ),
         ),
         const SizedBox(height: Spacing.md),
         Wrap(

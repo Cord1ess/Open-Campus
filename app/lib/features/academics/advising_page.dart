@@ -10,12 +10,24 @@ import 'advising_model.dart';
 
 /// Pre-advising: courses offered for next-term registration and courses already
 /// taken. Data from /student/advising.
-class AdvisingPage extends ConsumerWidget {
+class AdvisingPage extends ConsumerStatefulWidget {
   const AdvisingPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.read(advisingProvider.notifier).ensureLoaded();
+  ConsumerState<AdvisingPage> createState() => _AdvisingPageState();
+}
+
+class _AdvisingPageState extends ConsumerState<AdvisingPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(advisingProvider.notifier).ensureLoaded();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(advisingProvider);
     return Scaffold(
       body: RefreshIndicator(

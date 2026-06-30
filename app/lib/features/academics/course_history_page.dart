@@ -11,12 +11,24 @@ import 'course_history_model.dart';
 
 /// Full academic record: degree progress, CGPA, and every course grouped by
 /// trimester with grade chips. Data from /student/course-history.
-class CourseHistoryPage extends ConsumerWidget {
+class CourseHistoryPage extends ConsumerStatefulWidget {
   const CourseHistoryPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.read(courseHistoryProvider.notifier).ensureLoaded();
+  ConsumerState<CourseHistoryPage> createState() => _CourseHistoryPageState();
+}
+
+class _CourseHistoryPageState extends ConsumerState<CourseHistoryPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(courseHistoryProvider.notifier).ensureLoaded();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(courseHistoryProvider);
     return Scaffold(
       body: RefreshIndicator(
@@ -56,6 +68,10 @@ class _Content extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = d.byTrimester;
+    // Pre-index GPA by trimester once (was an O(n²) scan-per-group below).
+    final gpaByTrimester = {
+      for (final g in d.trimesterGpas) g.trimester: g.gpa,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -72,10 +88,7 @@ class _Content extends StatelessWidget {
             child: _TrimesterCard(
               trimester: entry.key,
               courses: entry.value,
-              gpa: d.trimesterGpas
-                  .where((g) => g.trimester == entry.key)
-                  .map((g) => g.gpa)
-                  .firstOrNull,
+              gpa: gpaByTrimester[entry.key],
             ),
           ),
         ],
@@ -191,19 +204,21 @@ class _Ring extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: progress),
-            duration: Motion.slow,
-            curve: Motion.emphasized,
-            builder: (_, v, __) => SizedBox(
-              width: 72,
-              height: 72,
-              child: CircularProgressIndicator(
-                value: v,
-                strokeWidth: 7,
-                backgroundColor: color.withValues(alpha: 0.2),
-                valueColor: AlwaysStoppedAnimation(color),
-                strokeCap: StrokeCap.round,
+          RepaintBoundary(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: progress),
+              duration: Motion.slow,
+              curve: Motion.emphasized,
+              builder: (_, v, __) => SizedBox(
+                width: 72,
+                height: 72,
+                child: CircularProgressIndicator(
+                  value: v,
+                  strokeWidth: 7,
+                  backgroundColor: color.withValues(alpha: 0.2),
+                  valueColor: AlwaysStoppedAnimation(color),
+                  strokeCap: StrokeCap.round,
+                ),
               ),
             ),
           ),

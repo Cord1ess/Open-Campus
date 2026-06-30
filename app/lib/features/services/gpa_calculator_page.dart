@@ -19,8 +19,16 @@ class GpaCalculatorPage extends ConsumerStatefulWidget {
 
 class _GpaCalculatorPageState extends ConsumerState<GpaCalculatorPage> {
   @override
+  void initState() {
+    super.initState();
+    // Load course history once, after mount — not in build().
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(courseHistoryProvider.notifier).ensureLoaded();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    ref.read(courseHistoryProvider.notifier).ensureLoaded();
     final history = ref.watch(courseHistoryProvider);
     final data =
         history is ResData<CourseHistoryData> ? history.loaded.data : null;

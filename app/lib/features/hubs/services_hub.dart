@@ -148,6 +148,7 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fg = onAccent(accent); // readable foreground on the filled accent
     return SpringTap(
       onTap: onTap,
       borderRadius: BorderRadius.circular(Radii.lg),
@@ -160,14 +161,14 @@ class _ActionTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: Colors.white),
+            Icon(icon, color: fg),
             const SizedBox(height: Spacing.md),
             Text(title,
-                style: context.text.titleMedium?.copyWith(
-                    color: Colors.white, fontWeight: FontWeight.w800)),
+                style: context.text.titleMedium
+                    ?.copyWith(color: fg, fontWeight: FontWeight.w800)),
             Text(subtitle,
                 style: context.text.labelMedium
-                    ?.copyWith(color: Colors.white.withValues(alpha: 0.85))),
+                    ?.copyWith(color: fg.withValues(alpha: 0.85))),
           ],
         ),
       ),

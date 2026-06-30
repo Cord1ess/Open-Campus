@@ -4,7 +4,7 @@ import '../core/theme/app_theme.dart';
 import '../core/theme/motion.dart';
 
 export '../core/theme/motion.dart'
-    show SpringIn, SpringTap, CountUp, StaggerList, sharedAxisRoute;
+    show SpringIn, SpringTap, CountUp, sharedAxisRoute;
 
 /// Freshness state for a section (live vs. cached-from-device).
 enum Freshness { live, cached }
@@ -25,29 +25,34 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.xl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 20, color: context.scheme.primary),
-                  const SizedBox(width: Spacing.sm),
-                ],
-                Expanded(
-                  child: Text(title,
-                      style: context.text.titleMedium),
-                ),
-                if (trailing != null) trailing!,
+    final scheme = context.scheme;
+    // Matches the dashboard card: white/neutral surface with a hairline border
+    // (not a Material elevation), so every section reads as one design language.
+    return Container(
+      padding: const EdgeInsets.all(Spacing.lg),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(Radii.lg),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 20, color: scheme.primary),
+                const SizedBox(width: Spacing.sm),
               ],
-            ),
-            const SizedBox(height: Spacing.lg),
-            child,
-          ],
-        ),
+              Expanded(
+                child: Text(title, style: context.text.titleMedium),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: Spacing.lg),
+          child,
+        ],
       ),
     );
   }
@@ -279,8 +284,9 @@ class FeatureRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(Spacing.md),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.outlineVariant),
         ),
         child: Row(
           children: [
