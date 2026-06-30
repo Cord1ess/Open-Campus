@@ -101,7 +101,35 @@ final themeControllerProvider =
 });
 
 /// Convenience: the live ThemeData pair derived from current prefs.
+///
+/// Building a ThemeData is not free, and MaterialApp reads both `light` and
+/// `dark` on every rebuild — so we MEMOIZE by (seed, isBlack). Repeated reads for
+/// the same prefs return the cached ThemeData instantly; only an actual
+/// seed/mode change rebuilds. This is what makes theme/accent switching feel
+/// instant instead of janky.
+ThemeData? _cachedLight;
+Color? _cachedLightSeed;
+ThemeData? _cachedDark;
+Color? _cachedDarkSeed;
+bool? _cachedDarkBlack;
+
 extension ThemePrefsBuild on ThemePrefs {
-  ThemeData get light => AppTheme.light(seed: seed);
-  ThemeData get dark => AppTheme.dark(seed: seed, black: isBlack);
+  ThemeData get light {
+    if (_cachedLight == null || _cachedLightSeed != seed) {
+      _cachedLight = AppTheme.light(seed: seed);
+      _cachedLightSeed = seed;
+    }
+    return _cachedLight!;
+  }
+
+  ThemeData get dark {
+    if (_cachedDark == null ||
+        _cachedDarkSeed != seed ||
+        _cachedDarkBlack != isBlack) {
+      _cachedDark = AppTheme.dark(seed: seed, black: isBlack);
+      _cachedDarkSeed = seed;
+      _cachedDarkBlack = isBlack;
+    }
+    return _cachedDark!;
+  }
 }

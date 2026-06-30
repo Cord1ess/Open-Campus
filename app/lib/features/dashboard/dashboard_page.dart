@@ -15,12 +15,14 @@ import '../academics/class_routine_page.dart';
 import '../auth/auth_controller.dart';
 import '../finance/bill_page.dart';
 import '../profile/profile_page.dart';
+import 'attendance_page.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_widgets.dart';
 import 'home_model.dart';
 import 'models.dart';
 import 'notices_model.dart';
 import 'resource_view.dart';
+import 'results_page.dart';
 
 /// Thousands separator, compiled once and reused (the formatter runs many times
 /// per dashboard render).
@@ -34,11 +36,12 @@ final _phoneClean = RegExp(r'[^0-9+]');
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
 
+  // Pull-to-refresh always bypasses the freshness throttle and fetches live.
   Future<void> _refresh(WidgetRef ref) => Future.wait([
-        ref.read(homeProvider.notifier).load(),
-        ref.read(noticesProvider.notifier).load(),
-        ref.read(resultsProvider.notifier).load(),
-        ref.read(attendanceProvider.notifier).load(),
+        ref.read(homeProvider.notifier).load(force: true),
+        ref.read(noticesProvider.notifier).load(force: true),
+        ref.read(resultsProvider.notifier).load(force: true),
+        ref.read(attendanceProvider.notifier).load(force: true),
       ]);
 
   @override
@@ -100,9 +103,9 @@ class DashboardPage extends ConsumerWidget {
                   results: results,
                   attendance: attendance,
                   onRetryResults: () =>
-                      ref.read(resultsProvider.notifier).load(),
+                      ref.read(resultsProvider.notifier).load(force: true),
                   onRetryAttendance: () =>
-                      ref.read(attendanceProvider.notifier).load(),
+                      ref.read(attendanceProvider.notifier).load(force: true),
                 ),
                 const SizedBox(height: Spacing.xl),
                 Center(
@@ -417,24 +420,39 @@ class _DashboardBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const notices = _NoticesCard();
-    final resultsCard = ResourceSection<ResultsData>(
-      title: 'Results',
-      icon: Icons.school_outlined,
-      state: results,
-      loadingSkeleton: const CardSkeleton(chart: true),
-      builder: (d) => ResultsContent(d),
-      onRetry: onRetryResults,
-    );
-    final attendanceCard = ResourceSection<AttendanceData>(
-      title: 'Attendance',
-      icon: Icons.event_available_outlined,
-      state: attendance,
-      loadingSkeleton: const CardSkeleton(lines: 4),
-      builder: (d) => AttendanceContent(d),
-      onRetry: onRetryAttendance,
-    );
+    final resultsCard = Builder(builder: (context) {
+      return ResourceSection<ResultsData>(
+        title: 'Results',
+        icon: Icons.school_outlined,
+        state: results,
+        loadingSkeleton: const CardSkeleton(chart: true),
+        builder: (d) => ResultsContent(d),
+        onRetry: onRetryResults,
+        onOpen: () =>
+            Navigator.of(context).push(sharedAxisRoute(const ResultsPage())),
+      );
+    });
+    final attendanceCard = Builder(builder: (context) {
+      return ResourceSection<AttendanceData>(
+        title: 'Attendance',
+        icon: Icons.event_available_outlined,
+        state: attendance,
+        loadingSkeleton: const CardSkeleton(lines: 4),
+        builder: (d) => AttendanceContent(d),
+        onRetry: onRetryAttendance,
+        onOpen: () => Navigator.of(context)
+            .push(sharedAxisRoute(const AttendancePage())),
+      );
+    });
 
     if (Breakpoints.isDesktop(context)) {
+      // Upcoming is paired equal-height with Today's classes. Today shows ALL of
+      // today's classes (1..n), so match Upcoming's event count to it — otherwise
+      // a day with 3-4 classes leaves Upcoming (fixed at 2) with empty space.
+      // At least 2 so a light class day doesn't shrink Upcoming below its norm.
+      final todayCount = _TodayCard.todaysClasses(home).length;
+      final upcomingCount = todayCount > 2 ? todayCount : 2;
+
       // The top four summary cards share ONE height so the 2×2 block is even;
       // Each ROW is equal-height (so its two cards align), but rows size to
       // their own content — Payment/Advisor (less info) sit shorter than
@@ -442,7 +460,7 @@ class _DashboardBody extends StatelessWidget {
       return _StaggerColumn(children: [
         _Pair(
           equalHeight: true,
-          left: const _UpcomingCard(fill: true),
+          left: _UpcomingCard(fill: true, count: upcomingCount),
           right: _TodayCard(home: home, fill: true),
         ),
         _Pair(
@@ -472,7 +490,10 @@ class _DashboardBody extends StatelessWidget {
 /// today's date, and links to the full calendar.
 class _UpcomingCard extends ConsumerWidget {
   final bool fill;
-  const _UpcomingCard({this.fill = false});
+  /// How many upcoming events to show. Defaults to 2; the desktop pairing raises
+  /// it to match Today's class count so the two equal-height cards line up.
+  final int count;
+  const _UpcomingCard({this.fill = false, this.count = 2});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -483,7 +504,7 @@ class _UpcomingCard extends ConsumerWidget {
         .push(sharedAxisRoute(const CalendarPage()));
 
     final cal = async.asData?.value.defaultCalendar;
-    final events = cal?.nextEvents(2) ?? const [];
+    final events = cal?.nextEvents(count) ?? const [];
 
     return _DashCard(
       fill: fill,
@@ -838,10 +859,12 @@ class _PaymentCard extends ConsumerWidget {
       trailing: home != null
           ? _StatusPill(
               label: hasDue ? 'Due' : 'Clear',
-              fg: hasDue ? context.status.bad : context.status.good,
+              // Due stays red (it genuinely flags money owed); "Clear" uses the
+              // theme accent rather than a clashing green.
+              fg: hasDue ? context.status.bad : scheme.primary,
               bg: hasDue
                   ? context.status.badContainer
-                  : context.status.goodContainer,
+                  : scheme.primary.withValues(alpha: 0.14),
             )
           : null,
       footer: 'View bill & payments',
@@ -864,8 +887,7 @@ class _PaymentCard extends ConsumerWidget {
                     hasDue ? _bdt(due) : 'No dues',
                     maxLines: 1,
                     style: context.text.headlineSmall?.copyWith(
-                        color:
-                            hasDue ? scheme.onSurface : context.status.good,
+                        color: hasDue ? scheme.onSurface : scheme.primary,
                         fontWeight: FontWeight.w800,
                         height: 1.0),
                   ),
@@ -1007,12 +1029,18 @@ class _TodayCard extends StatelessWidget {
     DateTime.friday: 'Friday',
   };
 
+  /// Today's class sessions from the home routine — the single source of truth
+  /// for both this card and the count the Upcoming card matches against.
+  static List<ClassSession> todaysClasses(HomeSummary? home) {
+    final routine = home?.routine ?? const <ClassSession>[];
+    final today = _names[DateTime.now().weekday];
+    return routine.where((s) => s.day == today).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final routine = home?.routine ?? const [];
-    final today = _names[DateTime.now().weekday];
-    final todays = routine.where((s) => s.day == today).toList();
+    final todays = todaysClasses(home);
 
     void openRoutine() => Navigator.of(context)
         .push(sharedAxisRoute(const ClassRoutinePage()));

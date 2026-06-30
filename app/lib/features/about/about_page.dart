@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_config.dart';
 import '../../core/app_info.dart';
+import '../../core/cache/local_cache.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
@@ -24,11 +25,51 @@ class AboutPage extends ConsumerStatefulWidget {
 class _AboutPageState extends ConsumerState<AboutPage> {
   ServerStatus? _status;
   bool _checking = false;
+  CacheSummary? _cache;
+  bool _clearing = false;
 
   @override
   void initState() {
     super.initState();
     _ping();
+    _loadCacheSummary();
+  }
+
+  Future<void> _loadCacheSummary() async {
+    final s = await ref.read(localCacheProvider).summary();
+    if (mounted) setState(() => _cache = s);
+  }
+
+  Future<void> _clearCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear cached data?'),
+        content: const Text(
+          'This removes the saved copy of your data from this device. Your '
+          'information stays safe in UCAM and will be fetched again next time '
+          'you open the app or pull to refresh.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _clearing = true);
+    await ref.read(localCacheProvider).clearAll();
+    await _loadCacheSummary();
+    if (mounted) {
+      setState(() => _clearing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cached data cleared.')),
+      );
+    }
   }
 
   Future<void> _ping() async {
@@ -61,7 +102,7 @@ class _AboutPageState extends ConsumerState<AboutPage> {
         title: 'Settings',
         slivers: [
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(
+            padding: const EdgeInsets.fromLTRB(
                 Spacing.lg, Spacing.sm, Spacing.lg, Spacing.xxl),
             sliver: SliverToBoxAdapter(
               child: Center(
@@ -107,7 +148,9 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                       const SizedBox(height: Spacing.lg),
                       FadeSlideIn(delayMs: 170, child: _linksCard()),
                       const SizedBox(height: Spacing.lg),
-                      FadeSlideIn(delayMs: 200, child: _privacyNote()),
+                      FadeSlideIn(delayMs: 200, child: _storageCard()),
+                      const SizedBox(height: Spacing.lg),
+                      FadeSlideIn(delayMs: 230, child: _privacyNote()),
                     ],
                   ),
                 ),
@@ -154,6 +197,97 @@ class _AboutPageState extends ConsumerState<AboutPage> {
         ],
       ),
     );
+  }
+
+  Widget _storageCard() {
+    final scheme = context.scheme;
+    final cache = _cache;
+    final empty = cache == null || cache.isEmpty;
+
+    String subtitle;
+    if (cache == null) {
+      subtitle = 'Checking…';
+    } else if (cache.isEmpty) {
+      subtitle = 'Nothing is stored on this device right now.';
+    } else {
+      final kb = (cache.bytes / 1024).clamp(0, double.infinity);
+      final size = kb < 1 ? '<1 KB' : '${kb.toStringAsFixed(kb < 10 ? 1 : 0)} KB';
+      final synced =
+          cache.lastSynced != null ? _ago(cache.lastSynced!) : 'unknown';
+      subtitle =
+          '${cache.resourceCount} item${cache.resourceCount == 1 ? '' : 's'} '
+          'cached · $size · last synced $synced';
+    }
+
+    return SectionCard(
+      title: 'Storage',
+      icon: Icons.sd_storage_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Open Campus saves your last-loaded data on this device so the app '
+            'opens instantly and works briefly offline. The server keeps '
+            'nothing — this is the only saved copy, and it refreshes itself.',
+            style: context.text.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
+          ),
+          const SizedBox(height: Spacing.md),
+          Text(subtitle,
+              style: context.text.labelMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: Spacing.md),
+          // Destructive-tinted clear action; disabled while empty or in flight.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SpringTap(
+              onTap: (empty || _clearing) ? null : _clearCache,
+              borderRadius: BorderRadius.circular(Radii.md),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: Spacing.lg, vertical: Spacing.sm),
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer
+                      .withValues(alpha: (empty || _clearing) ? 0.4 : 1),
+                  borderRadius: BorderRadius.circular(Radii.md),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_clearing)
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: scheme.onErrorContainer),
+                      )
+                    else
+                      Icon(Icons.delete_outline_rounded,
+                          size: 18, color: scheme.onErrorContainer),
+                    const SizedBox(width: Spacing.sm),
+                    Text(
+                      _clearing ? 'Clearing…' : 'Clear cached data',
+                      style: context.text.labelLarge?.copyWith(
+                          color: scheme.onErrorContainer,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact relative time ("just now", "5 min ago", "2 h ago", "3 d ago").
+  String _ago(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
+    if (d.inHours < 24) return '${d.inHours} h ago';
+    return '${d.inDays} d ago';
   }
 
   Widget _aboutCard() {

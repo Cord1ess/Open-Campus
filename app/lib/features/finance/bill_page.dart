@@ -34,7 +34,7 @@ class _BillPageState extends ConsumerState<BillPage> {
     final state = ref.watch(billProvider);
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () => ref.read(billProvider.notifier).load(),
+        onRefresh: () => ref.read(billProvider.notifier).load(force: true),
         child: CustomScrollView(
           slivers: [
             SliverCollapsingAppBar(title: 'Bill & Payments'),
@@ -48,7 +48,8 @@ class _BillPageState extends ConsumerState<BillPage> {
                       title: 'Couldn\'t load',
                       subtitle: message,
                       actionLabel: 'Try again',
-                      onAction: () => ref.read(billProvider.notifier).load(),
+                      onAction: () =>
+                          ref.read(billProvider.notifier).load(force: true),
                     ),
                   ResData(:final loaded) => _Content(loaded.data),
                 },

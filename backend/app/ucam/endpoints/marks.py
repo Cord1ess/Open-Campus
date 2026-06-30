@@ -47,6 +47,63 @@ async def fetch_trimester_options(session: UcamSession) -> list[tuple[str, str]]
     return select_options(html, _DDL_TRIMESTER)
 
 
+async def fetch_course_options(
+    session: UcamSession, trimester_value: str
+) -> list[tuple[str, str]]:
+    """Return [(value, label)] of the courses in a trimester WITHOUT reading any
+    marks — one trimester postback. Lets the app list courses immediately and then
+    fetch each course's marks on demand (so they pop in one at a time)."""
+    cached = session._marks_courses_cache.get(trimester_value)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    page_url = (await resolve_page_url(session, _PATH)) or _PATH
+    base_html = await fetch_page(session, _PATH)
+    after_term = await postback(
+        session, page_url, base_html,
+        event_target=_DDL_TRIMESTER, control_name=_DDL_TRIMESTER,
+        value=trimester_value,
+    )
+    courses = select_options(after_term, _DDL_COURSE)
+    session._marks_courses_cache[trimester_value] = courses
+    return courses
+
+
+async def fetch_marks_for_course(
+    session: UcamSession, trimester_value: str, course_value: str
+) -> CourseMarks | None:
+    """Read ONE course's marks panel. Drives the trimester postback then the
+    single course postback. Result is memoised on the session per (trimester,
+    course) so re-opening is instant. Returns None if the course has no marks."""
+    key = (trimester_value, course_value)
+    cached = session._marks_one_cache.get(key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    page_url = (await resolve_page_url(session, _PATH)) or _PATH
+    base_html = await fetch_page(session, _PATH)
+    after_term = await postback(
+        session, page_url, base_html,
+        event_target=_DDL_TRIMESTER, control_name=_DDL_TRIMESTER,
+        value=trimester_value,
+    )
+    # Find this course's label so the parsed result is named even if the panel
+    # doesn't echo it.
+    label = None
+    for v, lbl in select_options(after_term, _DDL_COURSE):
+        if v == course_value:
+            label = lbl
+            break
+    html = await postback(
+        session, page_url, after_term,
+        event_target=_DDL_COURSE, control_name=_DDL_COURSE,
+        value=course_value,
+    )
+    cm = parse_course_marks(html, course_label=label)
+    result = cm if cm.has_marks else None
+    session._marks_one_cache[key] = result
+    return result
+
+
 async def fetch_marks_for_trimester(
     session: UcamSession, trimester_value: str
 ) -> list[CourseMarks]:

@@ -241,6 +241,11 @@ class _SharedAxisRoute<T> extends PageRouteBuilder<T> {
     const inCurve = Cubic(0.05, 0.7, 0.1, 1.0); // emphasized decelerate
     final entering = CurvedAnimation(parent: animation, curve: inCurve);
     final leaving = CurvedAnimation(parent: secondaryAnimation, curve: inCurve);
+    // Perf: ONE fade only, on the entering page. Each FadeTransition is a
+    // saveLayer (offscreen buffer) — the most expensive primitive on web — so
+    // the previous nested two-fade version cost two full-page saveLayers per
+    // navigation. The leaving page now slides without fading (the dim earned
+    // nothing and cost a saveLayer); slides are nearly free.
     return FadeTransition(
       opacity: entering,
       child: SlideTransition(
@@ -249,10 +254,7 @@ class _SharedAxisRoute<T> extends PageRouteBuilder<T> {
         child: SlideTransition(
           position: Tween(begin: Offset.zero, end: const Offset(-0.06, 0))
               .animate(leaving),
-          child: FadeTransition(
-            opacity: Tween(begin: 1.0, end: 0.85).animate(leaving),
-            child: child,
-          ),
+          child: child,
         ),
       ),
     );

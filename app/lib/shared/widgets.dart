@@ -66,9 +66,14 @@ class FreshnessChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = context.scheme;
     final live = freshness == Freshness.live;
-    final bg = live ? context.status.goodContainer : context.scheme.surfaceContainerHighest;
-    final fg = live ? context.status.good : context.scheme.onSurfaceVariant;
+    // "Live" uses the THEME ACCENT (not a semantic green) so the chip matches
+    // whatever seed/accent is active instead of clashing; cached stays neutral.
+    final bg = live
+        ? scheme.primary.withValues(alpha: 0.14)
+        : scheme.surfaceContainerHighest;
+    final fg = live ? scheme.primary : scheme.onSurfaceVariant;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -98,41 +103,100 @@ class FreshnessChip extends StatelessWidget {
   }
 }
 
-/// Shimmer skeleton block, animated with the M3 surface tones.
-class Skeleton extends StatefulWidget {
-  final double height;
-  final double? width;
-  final double radius;
-  const Skeleton({super.key, this.height = 14, this.width, this.radius = 8});
+/// The app's single, distinctive loading indicator — used everywhere instead of
+/// shimmer skeletons. A circular progress ring in the accent color sitting on a
+/// soft, slowly-breathing halo, with an optional label. Fully theme-driven so it
+/// recolors with the active accent. [progress] (0–1) shows determinate progress
+/// when known (e.g. "3 of 8 loaded"); null = indeterminate spinner.
+class LoadingIndicator extends StatefulWidget {
+  final String? label;
+  final double size;
+  final double? progress;
+  /// Vertical padding around the indicator (so it centers nicely in a card).
+  final double pad;
+  const LoadingIndicator({
+    super.key,
+    this.label,
+    this.size = 40,
+    this.progress,
+    this.pad = Spacing.xl,
+  });
 
   @override
-  State<Skeleton> createState() => _SkeletonState();
+  State<LoadingIndicator> createState() => _LoadingIndicatorState();
 }
 
-class _SkeletonState extends State<Skeleton>
+class _LoadingIndicatorState extends State<LoadingIndicator>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: Motion.slow)..repeat(reverse: true);
+  late final AnimationController _halo =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
+        ..repeat(reverse: true);
 
   @override
   void dispose() {
-    _c.dispose();
+    _halo.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final lo = context.scheme.surfaceContainerHighest;
-    final hi = context.scheme.surfaceContainer;
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) => Container(
-        height: widget.height,
-        width: widget.width,
-        decoration: BoxDecoration(
-          color: Color.lerp(lo, hi, _c.value),
-          borderRadius: BorderRadius.circular(widget.radius),
-        ),
+    final scheme = context.scheme;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: widget.pad),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RepaintBoundary(
+            child: SizedBox(
+              width: widget.size + 18,
+              height: widget.size + 18,
+              child: AnimatedBuilder(
+                animation: _halo,
+                builder: (_, __) {
+                  final t = _halo.value; // 0..1 breathing
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Breathing halo behind the ring.
+                      Container(
+                        width: widget.size + 6 + t * 12,
+                        height: widget.size + 6 + t * 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: scheme.primary.withValues(alpha: 0.10 * (1 - t)),
+                        ),
+                      ),
+                      SizedBox(
+                        width: widget.size,
+                        height: widget.size,
+                        child: CircularProgressIndicator(
+                          value: widget.progress,
+                          strokeWidth: 3.5,
+                          strokeCap: StrokeCap.round,
+                          backgroundColor:
+                              scheme.primary.withValues(alpha: 0.14),
+                          valueColor: AlwaysStoppedAnimation(scheme.primary),
+                        ),
+                      ),
+                      if (widget.progress != null)
+                        Text('${(widget.progress! * 100).round()}%',
+                            style: context.text.labelSmall?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w800)),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+          if (widget.label != null) ...[
+            const SizedBox(height: Spacing.md),
+            Text(widget.label!,
+                textAlign: TextAlign.center,
+                style: context.text.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant)),
+          ],
+        ],
       ),
     );
   }

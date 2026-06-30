@@ -101,6 +101,113 @@ class GoalProjection {
   });
 }
 
+/// Required-GPA analysis for a SINGLE upcoming trimester (the reference app's
+/// "next trimester" planner): given current standing and how many credits you'll
+/// take next, what trimester GPA do you need to land at [targetCgpa]?
+///   target = (current*completed + needed*next) / (completed + next)
+/// → needed = (target*(completed+next) - current*completed) / next
+class NextTrimesterPlan {
+  final double requiredGpa;
+  final bool achievable; // requiredGpa within (0, 4]
+  final bool alreadyAchieved; // current standing already meets target
+  /// Highest CGPA reachable next trimester (all-A) — used when unachievable.
+  final double maxReachableCgpa;
+  const NextTrimesterPlan({
+    required this.requiredGpa,
+    required this.achievable,
+    required this.alreadyAchieved,
+    required this.maxReachableCgpa,
+  });
+}
+
+NextTrimesterPlan planNextTrimester({
+  required double currentCgpa,
+  required double completedCredits,
+  required double nextCredits,
+  required double targetCgpa,
+}) {
+  final total = completedCredits + nextCredits;
+  final currentPoints = currentCgpa * completedCredits;
+  final maxReachable =
+      nextCredits <= 0 ? currentCgpa : (currentPoints + 4.0 * nextCredits) / total;
+  if (nextCredits <= 0) {
+    return NextTrimesterPlan(
+      requiredGpa: 0,
+      achievable: false,
+      alreadyAchieved: currentCgpa >= targetCgpa - 1e-9,
+      maxReachableCgpa: currentCgpa,
+    );
+  }
+  final required = (targetCgpa * total - currentPoints) / nextCredits;
+  return NextTrimesterPlan(
+    requiredGpa: required,
+    achievable: required > 1e-9 && required <= maxGradePoint + 1e-9,
+    alreadyAchieved: required < 1e-9,
+    maxReachableCgpa: math.min(maxGradePoint, maxReachable),
+  );
+}
+
+/// A human "how hard is this" label for a required GPA (mirrors the reference
+/// app's difficulty tiers).
+String difficultyLabel(double requiredGpa) {
+  if (requiredGpa > maxGradePoint) return 'Impossible';
+  if (requiredGpa >= 3.67) return 'Very hard';
+  if (requiredGpa >= 3.33) return 'Hard';
+  if (requiredGpa >= 3.0) return 'Moderate';
+  if (requiredGpa >= 2.0) return 'Manageable';
+  return 'Comfortable';
+}
+
+/// New CGPA after a trimester of [trimesterGpa] over [trimesterCredits], on top
+/// of the current standing. Used for projection tables.
+double projectedCgpa({
+  required double currentCgpa,
+  required double completedCredits,
+  required double trimesterGpa,
+  required double trimesterCredits,
+}) {
+  final total = completedCredits + trimesterCredits;
+  if (total <= 0) return currentCgpa;
+  return (currentCgpa * completedCredits + trimesterGpa * trimesterCredits) /
+      total;
+}
+
+/// Retake impact (UIU rule): the HIGHER of the two grades is what counts toward
+/// CGPA. So a retake only helps if the new grade beats the old; if it's lower,
+/// the previous (higher) grade still stands → zero/negative is clamped to "no
+/// loss". [improvement] is the per-course quality-point gain that actually
+/// counts.
+class RetakeImpact {
+  final double previousPoint;
+  final double newPoint;
+  final double credit;
+  /// Quality points that count toward CGPA (UIU keeps the higher grade), so this
+  /// is max(0, (new-prev)) * credit.
+  final double countedImprovement;
+  bool get improved => newPoint > previousPoint;
+  const RetakeImpact({
+    required this.previousPoint,
+    required this.newPoint,
+    required this.credit,
+    required this.countedImprovement,
+  });
+}
+
+RetakeImpact retakeImpact({
+  required double previousPoint,
+  required double newPoint,
+  required double credit,
+}) {
+  // UIU counts the higher grade — a worse retake doesn't lower your CGPA.
+  final delta = math.max(0.0, newPoint - previousPoint);
+  return RetakeImpact(
+    previousPoint: previousPoint,
+    newPoint: newPoint,
+    credit: credit,
+    countedImprovement: delta * credit,
+  );
+}
+
 /// Project what average grade point is needed across the remaining credits to
 /// reach [goalCgpa], given current standing. CGPA is credit-weighted, so:
 ///   goal = (currentCgpa*completed + neededAvg*remaining) / (completed+remaining)

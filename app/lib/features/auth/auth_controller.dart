@@ -20,7 +20,15 @@ class AuthSignedOut extends AuthState {
 
 class AuthSignedIn extends AuthState {
   final String roll;
-  const AuthSignedIn(this.roll);
+
+  /// True when this state came from an interactive login THIS session (vs. a
+  /// silently restored session on cold app-start). A fresh login should always
+  /// run the blocking bootstrap (wait for all data) so the dashboard never
+  /// appears empty and fills in card-by-card; a restored session can use the
+  /// instant-shell path (show cached data immediately, refresh behind it).
+  final bool fromLogin;
+
+  const AuthSignedIn(this.roll, {this.fromLogin = false});
 }
 
 final authControllerProvider =
@@ -69,7 +77,7 @@ class AuthController extends StateNotifier<AuthState> {
           await creds.clear();
         }
         _ref.read(tokenProvider.notifier).state = data.token;
-        state = AuthSignedIn(data.roll);
+        state = AuthSignedIn(data.roll, fromLogin: true);
         return null;
       case ApiUnauthorized():
         state = const AuthSignedOut();

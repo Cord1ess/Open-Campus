@@ -18,7 +18,14 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Open Campus — unofficial companion app for UIU's UCAM portal.">
+  <meta name="description" content="Open Campus: unofficial companion app for UIU's UCAM portal.">
+
+  <!-- Warm DNS + TLS to the API host and the CanvasKit CDN before the app needs
+       them, so the first data fetch and the renderer download don't each pay a
+       fresh connection setup. -->
+  <link rel="preconnect" href="https://open-campus-sdsw.onrender.com" crossorigin>
+  <link rel="dns-prefetch" href="https://open-campus-sdsw.onrender.com">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 
   <!-- Seamless status/notification bar: matches the app surface, adapts to
        light/dark, so the bar reads as one continuous background (no brand bar). -->
@@ -38,6 +45,79 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- Branded boot loader: shown immediately while the Flutter engine
+       (main.dart.js + CanvasKit) actually downloads, so the real load is never a
+       blank screen. Mirrors the in-app splash (orange logo tile, title, one-line
+       description) and uses surface-matched colors so when Flutter paints its own
+       splash behind it the hand-off is seamless. Flutter removes #boot-loader on
+       its first frame (flutter-first-frame), instantly — no fade — since the
+       in-app splash is identical and already underneath. The bar is INDETERMINATE
+       on purpose: the browser can't know the engine's total download size, so an
+       honest "actively loading" bar beats a fake percentage. -->
+  <style>
+    #boot-loader {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 9999;
+      background: #FFFFFF; color: #14181F;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    /* Follow the OS light/dark preference — the only theme signal available
+       before Flutter boots (the in-app accent/seed isn't knowable yet). The
+       surface colors match the app's light (#FFFFFF) and dark (#0E1116). */
+    @media (prefers-color-scheme: dark) {
+      #boot-loader { background: #0E1116; color: #E6E9EF; } }
+    #boot-loader .logo {
+      width: 96px; height: 96px; border-radius: 28px; background: #FF8007;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 10px 30px rgba(255,128,7,.28); }
+    #boot-loader .logo svg { width: 52px; height: 52px; }
+    #boot-loader .title {
+      margin-top: 24px; font-size: 26px; font-weight: 700; letter-spacing: -.3px; }
+    #boot-loader .desc {
+      margin-top: 8px; font-size: 14px; opacity: .65; text-align: center;
+      max-width: 280px; line-height: 1.45; }
+    #boot-loader .bar {
+      margin-top: 32px; width: 200px; height: 4px; border-radius: 999px;
+      background: rgba(255,128,7,.18); overflow: hidden; position: relative; }
+    #boot-loader .bar::before {
+      content: ''; position: absolute; left: 0; top: 0; height: 100%;
+      width: 40%; border-radius: 999px; background: #FF8007;
+      animation: boot-slide 1.25s ease-in-out infinite; }
+    @keyframes boot-slide {
+      0%   { left: -40%; width: 40%; }
+      50%  { left: 30%;  width: 55%; }
+      100% { left: 100%; width: 40%; } }
+  </style>
+  <div id="boot-loader">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm-6.82 9L12 16.72 18.82 12 12 8.18 5.18 12zM5 13.18v3.79l7 3.82 7-3.82v-3.79l-7 3.82-7-3.82z"/>
+      </svg>
+    </div>
+    <div class="title">Welcome to Open Campus</div>
+    <div class="desc">Your campus made simple: results, attendance, routine and dues.</div>
+    <div class="bar"></div>
+  </div>
+  <script>
+    // Self-heal returning visitors: a previous deploy registered a service
+    // worker (Flutter 3.44's self-unregistering SW) that can leave a stuck white
+    // screen by serving stale, hash-mismatched assets. We no longer register one
+    // (see flutter_bootstrap.js), but a cached SW lingers until killed — so on
+    // every load, proactively unregister any service worker still controlling
+    // this page. Harmless when none exist.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) { r.unregister(); });
+      }).catch(function () {});
+    }
+    // Remove the boot loader the instant Flutter paints its first frame. No fade
+    // — the in-app splash is identical and already painted underneath, so an
+    // immediate removal is a seamless hand-off (and avoids any extra wait).
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('boot-loader');
+      if (el) el.remove();
+    });
+  </script>
+
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

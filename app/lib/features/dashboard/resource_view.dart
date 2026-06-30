@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import 'dashboard_controller.dart';
 
@@ -12,6 +13,10 @@ class ResourceSection<T> extends StatelessWidget {
   final Widget Function(T data) builder;
   final Widget loadingSkeleton;
   final VoidCallback? onRetry;
+  /// When set, the card title becomes tappable (shows an arrow) and opens the
+  /// full page. Used on the dashboard so Results/Attendance cards link through
+  /// without hijacking the in-card chart/accordion/filter interactions.
+  final VoidCallback? onOpen;
 
   const ResourceSection({
     super.key,
@@ -21,7 +26,34 @@ class ResourceSection<T> extends StatelessWidget {
     required this.builder,
     required this.loadingSkeleton,
     this.onRetry,
+    this.onOpen,
   });
+
+  Widget? _openAffordance(BuildContext context) {
+    if (onOpen == null) return null;
+    final scheme = context.scheme;
+    return SpringTap(
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(Radii.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(Radii.full),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Open',
+                style: context.text.labelSmall?.copyWith(
+                    color: scheme.primary, fontWeight: FontWeight.w800)),
+            const SizedBox(width: 2),
+            Icon(Icons.arrow_forward_rounded, size: 14, color: scheme.primary),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,34 +74,28 @@ class ResourceSection<T> extends StatelessWidget {
       ResData<T>(:final loaded) => SectionCard(
           title: title,
           icon: icon,
-          trailing:
-              FreshnessChip(freshness: loaded.freshness, at: loaded.syncedAt),
+          trailing: onOpen != null
+              ? _openAffordance(context)
+              : FreshnessChip(freshness: loaded.freshness, at: loaded.syncedAt),
           child: builder(loaded.data),
         ),
     };
   }
 }
 
-/// Standard skeletons.
+/// Standard in-card loading state. Kept named `CardSkeleton` for its many call
+/// sites, but it now shows the app's unified [LoadingIndicator] (a circular
+/// progress ring) instead of shimmer bars. [lines]/[chart] are retained for API
+/// compatibility but no longer affect the look.
 class CardSkeleton extends StatelessWidget {
   final int lines;
   final bool chart;
-  const CardSkeleton({super.key, this.lines = 3, this.chart = false});
+  final String? label;
+  const CardSkeleton(
+      {super.key, this.lines = 3, this.chart = false, this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (chart) ...[
-          const Skeleton(height: 120, radius: 16),
-          const SizedBox(height: 16),
-        ],
-        for (var i = 0; i < lines; i++) ...[
-          if (i > 0) const SizedBox(height: 12),
-          Skeleton(height: 14, width: i.isEven ? null : 180),
-        ],
-      ],
-    );
+    return Center(child: LoadingIndicator(label: label));
   }
 }

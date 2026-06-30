@@ -180,6 +180,35 @@ async def get_marks(session: CurrentSession, trimester: str) -> MarksResponse:
     return MarksResponse(courses=courses)
 
 
+@router.get("/marks/courses", response_model_by_alias=False)
+async def get_mark_courses(
+    session: CurrentSession, trimester: str
+) -> list[dict]:
+    """The course list for a trimester WITHOUT reading marks — so the app can show
+    the courses immediately and then fetch each one's marks on demand (they pop in
+    one at a time). Returns [{value, label}]."""
+    try:
+        opts = await marks_ep.fetch_course_options(session, trimester)
+    except (UcamSessionExpired, UcamError, httpx.HTTPError) as exc:
+        raise _handle_failure(exc)
+    return [{"value": v, "label": label} for v, label in opts]
+
+
+@router.get("/marks/course", response_model_by_alias=False)
+async def get_mark_course(
+    session: CurrentSession, trimester: str, course: str
+) -> dict | None:
+    """One course's item-wise marks (its value from /marks/courses). Returns null
+    if the course has no marks entered yet."""
+    try:
+        cm = await marks_ep.fetch_marks_for_course(session, trimester, course)
+    except (UcamSessionExpired, UcamError, httpx.HTTPError) as exc:
+        raise _handle_failure(exc)
+    if cm is None:
+        return None
+    return cm.model_dump(by_alias=False)
+
+
 @router.get("/exam-routine", response_model=ExamRoutineResponse,
             response_model_by_alias=False)
 async def get_exam_routine(session: CurrentSession) -> ExamRoutineResponse:

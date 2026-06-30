@@ -35,7 +35,20 @@ jobs:
 
       - name: Build web
         working-directory: app
-        run: flutter build web --release --base-href "/Open-Campus/"
+        # --wasm builds the skwasm renderer (dart2wasm), which renders off the
+        # main thread and paces frames far better than canvaskit on high-refresh
+        # displays — the fix for testers' "choppy on a 120Hz screen" reports. The
+        # build also emits a dart2js + canvaskit fallback automatically, so
+        # browsers without WASM-GC still work. (Unblocked by upgrading
+        # flutter_secure_storage to v10, whose web package dropped dart:html.)
+        #
+        # NOTE: skwasm's multithreaded mode needs cross-origin isolation
+        # (COOP/COEP headers) which GitHub Pages can't set, so on Pages it runs
+        # single-threaded — still better-paced than canvaskit, but not full speed.
+        # A host that allows those headers would unlock the multithreaded path.
+        #
+        # --no-web-resources-cdn keeps CanvasKit (the fallback) same-origin.
+        run: flutter build web --wasm --release --no-web-resources-cdn --base-href "/Open-Campus/"
 
       - name: Disable Jekyll (serve _-prefixed Flutter assets)
         run: touch app/build/web/.nojekyll

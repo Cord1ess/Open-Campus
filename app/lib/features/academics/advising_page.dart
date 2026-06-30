@@ -31,7 +31,7 @@ class _AdvisingPageState extends ConsumerState<AdvisingPage> {
     final state = ref.watch(advisingProvider);
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () => ref.read(advisingProvider.notifier).load(),
+        onRefresh: () => ref.read(advisingProvider.notifier).load(force: true),
         child: CustomScrollView(
           slivers: [
             SliverCollapsingAppBar(title: 'Pre-Advising'),
@@ -46,7 +46,7 @@ class _AdvisingPageState extends ConsumerState<AdvisingPage> {
                       subtitle: message,
                       actionLabel: 'Try again',
                       onAction: () =>
-                          ref.read(advisingProvider.notifier).load(),
+                          ref.read(advisingProvider.notifier).load(force: true),
                     ),
                   ResData(:final loaded) => _Content(loaded.data),
                 },

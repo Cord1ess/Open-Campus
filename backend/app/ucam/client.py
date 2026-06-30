@@ -110,6 +110,13 @@ class UcamSession:
     # the marks cascade is N+1 UCAM postbacks, so we don't re-walk it if the app
     # re-opens the same trimester. Keyed by trimester value -> parsed courses.
     _marks_cache: dict[str, object] = field(default_factory=dict, repr=False)
+    # Incremental marks: the course LIST per trimester (value->[(value,label)]),
+    # and ONE course's parsed marks keyed by (trimester, course). Lets the app
+    # fetch courses one at a time so they pop in as they load.
+    _marks_courses_cache: dict[str, object] = field(
+        default_factory=dict, repr=False)
+    _marks_one_cache: dict[tuple[str, str], object] = field(
+        default_factory=dict, repr=False)
 
     async def throttle(self) -> None:
         """Acquire a turn and wait until enough time has passed since the last

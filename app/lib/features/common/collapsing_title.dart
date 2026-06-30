@@ -40,7 +40,12 @@ class SliverCollapsingAppBar extends StatelessWidget {
       // Subtle hairline once content scrolls under, no color wash.
       scrolledUnderElevation: 0,
       automaticallyImplyLeading: canPop,
-      actions: actions,
+      // Pad the trailing actions so the action icon sits the SAME distance from
+      // the right edge as the back button's icon does from the left (the default
+      // leaves actions noticeably closer to the edge than the leading button).
+      actions: actions == null
+          ? null
+          : [...actions!, const SizedBox(width: 4)],
       // Large-app-bar geometry: standard toolbar + room for the expanded title.
       toolbarHeight: kToolbarHeight,
       expandedHeight: kToolbarHeight + 72,

@@ -113,12 +113,14 @@ class AppTheme {
         ? (AppColors.orange, AppColors.blue)
         : _shadesOf(seed);
 
-    // Always neutral surfaces; accents injected on top. Start from a fromSeed
-    // scheme only to get sensible error/shadow roles, then override the rest.
-    var scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: brightness,
-    );
+    // Start from a CONSTANT base scheme (ColorScheme.light/dark are cheap const
+    // factories) instead of ColorScheme.fromSeed — fromSeed runs the expensive
+    // HCT tonal-palette computation on every call, and we override almost the
+    // whole scheme in _cleanScheme anyway, so its output was mostly discarded.
+    // That computation was the main cause of theme/accent-switch lag.
+    var scheme = brightness == Brightness.light
+        ? const ColorScheme.light()
+        : const ColorScheme.dark();
     scheme = _cleanScheme(scheme, brightness, accentA, accentB);
 
     // Pitch-black: collapse the dark scheme's grey surfaces to true black,
@@ -181,8 +183,16 @@ class AppTheme {
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: scheme.surfaceContainer,
-        indicatorColor: scheme.secondaryContainer,
-        selectedIconTheme: IconThemeData(color: scheme.onSecondaryContainer),
+        // Circular selection indicator (not the default wide pill) with the
+        // accent tint, so the selected icon sits in a clean circle.
+        indicatorColor: scheme.primary.withValues(alpha: 0.16),
+        indicatorShape: const CircleBorder(),
+        selectedIconTheme: IconThemeData(color: scheme.primary),
+        unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
+        selectedLabelTextStyle: TextStyle(
+            color: scheme.primary, fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelTextStyle: TextStyle(
+            color: scheme.onSurfaceVariant, fontSize: 12),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/debug/fps_overlay.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/providers.dart';
+import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/bootstrap/bootstrap_screen.dart';
@@ -56,17 +59,27 @@ class OpenCampusApp extends ConsumerWidget {
       theme: theme.light,
       darkTheme: theme.dark,
       themeMode: theme.materialMode,
+      // Smoothly cross-animate colors on theme/accent change (instead of a hard
+      // snap). Cheap now that the ThemeData itself is memoized.
+      themeAnimationDuration: Motion.fast,
+      themeAnimationCurve: Motion.emphasized,
       // Clamp system text scaling so very large accessibility font sizes don't
       // break tight layouts (nav bar, stat cards). Still allows modest scaling.
+      // Perf: MediaQuery.withClampedTextScaling subscribes to the text-scale
+      // factor ONLY — the old MediaQuery.of(context) here subscribed to every MQ
+      // property, so any size/inset/scrollbar change rebuilt the whole app
+      // subtree. AnnotatedRegion is a no-op on web, kept for mobile.
       builder: (context, child) {
-        final mq = MediaQuery.of(context);
-        final clamped = mq.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.15);
+        Widget app = MediaQuery.withClampedTextScaling(
+          minScaleFactor: 1.0,
+          maxScaleFactor: 1.15,
+          child: child!,
+        );
+        // Diagnostic FPS readout — only present with --dart-define=OC_FPS=true.
+        if (FpsOverlay.enabled) app = FpsOverlay(child: app);
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: overlay,
-          child: MediaQuery(
-            data: mq.copyWith(textScaler: clamped),
-            child: child!,
-          ),
+          child: app,
         );
       },
       home: const _Root(),
@@ -86,6 +99,22 @@ class _Root extends ConsumerStatefulWidget {
 class _RootState extends ConsumerState<_Root> {
   // True once the post-login bootstrap (data load) has finished for this session.
   bool _booted = false;
+  // True if the device already has cached data from a previous session. When so,
+  // we SKIP the blocking bootstrap screen entirely and render the shell instantly
+  // — every card shows its cached copy immediately and hydrates live behind it.
+  // The blocking bootstrap is then reserved for a true first-ever login (no cache
+  // to show), where a brief progress screen beats a wall of empty skeletons.
+  bool _hasCache = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Resolve cache presence once, up front, so the launch flow can decide
+    // between "instant shell" (warm) and "bootstrap" (cold) without flicker.
+    ref.read(localCacheProvider).hasAny().then((has) {
+      if (mounted && has) setState(() => _hasCache = true);
+    });
+  }
   // True once we've shown the login screen at least once. After that, an
   // AuthLoading (a login attempt in flight) keeps showing the login screen
   // (button reads "Signing in…") instead of flashing the splash spinner — the
@@ -118,8 +147,15 @@ class _RootState extends ConsumerState<_Root> {
         onDone: () => ref.read(onboardingProvider.notifier).complete(),
       );
       key = 'onboarding';
-    } else if (auth is AuthSignedIn && !_booted) {
-      // Signed in but data not loaded yet → show the bootstrap progress screen.
+    } else if (auth is AuthSignedIn &&
+        !_booted &&
+        (auth.fromLogin || !_hasCache)) {
+      // Show the blocking bootstrap (waits for ALL data) when:
+      //   • the user just logged in interactively (auth.fromLogin) — so the
+      //     dashboard never appears empty and pop-fills card-by-card; or
+      //   • there's no cache to show yet (true first run).
+      // Only a SILENTLY RESTORED session WITH cache skips this and uses the
+      // instant-shell path (cached data shown immediately, refreshed behind it).
       child = BootstrapScreen(
         key: ValueKey('bootstrap-${auth.roll}'),
         onReady: () => setState(() => _booted = true),

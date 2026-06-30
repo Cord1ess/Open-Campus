@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_page.dart';
 import '../hubs/academics_hub.dart';
@@ -74,12 +75,18 @@ class _AppShellState extends ConsumerState<AppShell> {
               selectedIndex: _index,
               onDestinationSelected: _select,
               labelType: NavigationRailLabelType.all,
+              // Wider rail + circular selection indicator with room to breathe,
+              // so the selected icon sits in a clean circle (not a squashed pill).
+              minWidth: 88,
+              groupAlignment: -0.85,
+              useIndicator: true,
               destinations: [
                 for (final it in _items)
                   NavigationRailDestination(
                     icon: Icon(it.icon),
                     selectedIcon: Icon(it.selectedIcon),
                     label: Text(it.label),
+                    padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
                   ),
               ],
             ),

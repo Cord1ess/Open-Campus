@@ -54,6 +54,7 @@ class ResourceController<T> extends StateNotifier<ResourceState<T>> {
     required this.path,
     required this.parse,
     required this.toJson,
+    this.freshFor = const Duration(minutes: 15),
   }) : super(const ResLoading());
 
   final Ref _ref;
@@ -61,6 +62,15 @@ class ResourceController<T> extends StateNotifier<ResourceState<T>> {
   final String path;
   final T Function(Map<String, dynamic>) parse;
   final Map<String, dynamic> Function(T) toJson;
+
+  /// How long an on-device cached copy is considered fresh. Within this window a
+  /// non-forced load (app launch, tab open, retry) serves the cache and SKIPS
+  /// the network call entirely — this is what takes redundant scrape load off
+  /// the backend, since reopening or revisiting the app no longer re-pulls UCAM
+  /// every time. A user-initiated pull-to-refresh always passes force:true to
+  /// bypass this and fetch live. The server stays stateless; the throttle lives
+  /// entirely on the device.
+  final Duration freshFor;
 
   bool _loading = false;
   bool _loadedOnce = false;
@@ -72,17 +82,19 @@ class ResourceController<T> extends StateNotifier<ResourceState<T>> {
     await load();
   }
 
-  Future<void> load() async {
+  /// [force] = true bypasses the freshness window and always hits the network
+  /// (pull-to-refresh). Default false respects [freshFor].
+  Future<void> load({bool force = false}) async {
     if (_loading) return; // coalesce concurrent calls
     _loading = true;
     try {
-      await _load();
+      await _load(force: force);
     } finally {
       _loading = false;
     }
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     final api = _ref.read(apiClientProvider);
     final cache = _ref.read(localCacheProvider);
 
@@ -93,6 +105,15 @@ class ResourceController<T> extends StateNotifier<ResourceState<T>> {
       try {
         state = ResData(
             Loaded(parse(cached.data), Freshness.cached, cached.fetchedAt));
+        // Freshness throttle: if the cached copy is still within its window and
+        // this isn't a forced refresh, serve it and SKIP the network entirely.
+        // This is what removes redundant UCAM pulls — reopening the app or
+        // revisiting a tab won't re-scrape until the data is actually stale.
+        final age = DateTime.now().difference(cached.fetchedAt);
+        if (!force && age < freshFor) {
+          _loadedOnce = true;
+          return;
+        }
       } catch (_) {/* corrupt cache — ignore, fall through to skeleton */}
     }
     if (state is! ResData) {
@@ -164,6 +185,8 @@ final resultsProvider =
     path: '/student/results',
     parse: ResultsData.fromJson,
     toJson: (d) => d.toJson(),
+    // Published grades change at most a few times a trimester.
+    freshFor: const Duration(minutes: 30),
   );
 });
 
@@ -175,6 +198,8 @@ final attendanceProvider = StateNotifierProvider<
     path: '/student/attendance',
     parse: AttendanceData.fromJson,
     toJson: (d) => d.toJson(),
+    // Updated per class; refresh a bit more eagerly.
+    freshFor: const Duration(minutes: 10),
   );
 });
 
@@ -186,6 +211,8 @@ final homeProvider = StateNotifierProvider<ResourceController<HomeSummary>,
     path: '/student/home',
     parse: HomeSummary.fromJson,
     toJson: (d) => d.toJson(),
+    // Profile/term summary is very stable.
+    freshFor: const Duration(minutes: 30),
   );
 });
 
@@ -209,6 +236,8 @@ final courseHistoryProvider = StateNotifierProvider<
     path: '/student/course-history',
     parse: CourseHistoryData.fromJson,
     toJson: (d) => d.toJson(),
+    // Full transcript — changes only at end of trimester.
+    freshFor: const Duration(hours: 1),
   );
 });
 
@@ -299,13 +328,54 @@ final marksProvider =
   };
 });
 
+/// The COURSE LIST for a trimester (no marks yet), so the app can show courses
+/// immediately and fetch each one's marks on demand. Keyed by trimester value.
+final markCoursesProvider =
+    FutureProvider.family<List<TrimesterOption>, String>((ref, trimester) async {
+  final api = ref.read(apiClientProvider);
+  final res = await api.getJson<List<TrimesterOption>>(
+    '/student/marks/courses?trimester=${Uri.encodeQueryComponent(trimester)}',
+    (j) => (j as List)
+        .map((e) => TrimesterOption.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+  return switch (res) {
+    ApiOk(:final data) => data,
+    ApiUnauthorized() => throw Exception('Session ended. Please log in again.'),
+    ApiSessionExpired() => throw Exception('UCAM session expired.'),
+    ApiUnavailable(:final message) => throw Exception(message),
+  };
+});
+
+/// ONE course's marks. Keyed by (trimester, course) so each course loads (and
+/// pops in) independently. Null data = course has no marks entered yet.
+typedef MarkCourseKey = ({String trimester, String course});
+
+final markCourseProvider =
+    FutureProvider.family<CourseMarks?, MarkCourseKey>((ref, key) async {
+  final api = ref.read(apiClientProvider);
+  final res = await api.getJson<CourseMarks?>(
+    '/student/marks/course?trimester=${Uri.encodeQueryComponent(key.trimester)}'
+    '&course=${Uri.encodeQueryComponent(key.course)}',
+    (j) => j == null ? null : CourseMarks.fromJson(j as Map<String, dynamic>),
+  );
+  return switch (res) {
+    ApiOk(:final data) => data,
+    ApiUnauthorized() => throw Exception('Session ended. Please log in again.'),
+    ApiSessionExpired() => throw Exception('UCAM session expired.'),
+    ApiUnavailable(:final message) => throw Exception(message),
+  };
+});
+
 /// The student's profile photo bytes, proxied (with auth) through our backend.
 /// Null while loading or if unavailable — the UI shows a person icon instead.
+///
+/// Watches ONLY whether a photo exists (via select on photoUrl), not the whole
+/// home state — otherwise every home refresh (cached→live, pull-to-refresh) would
+/// re-run this and re-fetch the image, making the avatar flicker/reload.
 final avatarProvider = FutureProvider<List<int>?>((ref) async {
-  // Only attempt once home has loaded (so we know a photo exists).
-  final home = ref.watch(homeProvider);
-  if (home is! ResData<HomeSummary> || home.loaded.data.photoUrl == null) {
-    return null;
-  }
+  final hasPhoto = ref.watch(homeProvider.select((s) =>
+      s is ResData<HomeSummary> && s.loaded.data.photoUrl != null));
+  if (!hasPhoto) return null;
   return ref.read(apiClientProvider).getBytes('/student/avatar');
 });

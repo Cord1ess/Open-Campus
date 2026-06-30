@@ -19,30 +19,43 @@ class Avatar extends StatelessWidget {
     final hasImage = bytes != null && bytes!.isNotEmpty;
     // Decode the photo at display resolution (not full UCAM resolution) so a
     // large profile JPEG doesn't sit in memory as a multi-MB bitmap to draw a
-    // ~44px circle. cacheWidth/Height are in physical pixels, hence the DPR.
+    // small circle. cacheWidth/Height are in physical pixels, hence the DPR.
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final decodePx = (size * dpr).round();
-    // Convert to Uint8List once here rather than per Image build.
     final imageBytes = hasImage ? Uint8List.fromList(bytes!) : null;
+
+    // Neutral fallback: a person glyph on a muted surface — no bright accent
+    // circle that could bleed around the photo's edges or flash before it loads.
+    final fallback = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      color: scheme.surfaceContainerHighest,
+      child: Icon(Icons.person_rounded,
+          size: radius * 1.1, color: scheme.onSurfaceVariant),
+    );
+
+    // ClipOval sized EXACTLY to the circle, with the content (image or fallback)
+    // filling it edge-to-edge via BoxFit.cover — so nothing shows behind/around
+    // it (no bleed) and the photo isn't squashed. A thin outline gives a crisp
+    // edge without a colored ring.
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: scheme.primaryContainer,
+        border: Border.all(color: scheme.outlineVariant, width: 1),
         boxShadow: [
           BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.22),
-            blurRadius: radius * 0.4,
-            offset: Offset(0, radius * 0.12),
+            color: scheme.shadow.withValues(alpha: 0.18),
+            blurRadius: radius * 0.35,
+            offset: Offset(0, radius * 0.1),
           ),
         ],
       ),
-      child: (!hasImage)
-          ? Icon(Icons.person,
-              size: radius * 1.0, color: scheme.onPrimaryContainer)
-          : ClipOval(
-              child: Image.memory(
+      child: ClipOval(
+        child: hasImage
+            ? Image.memory(
                 imageBytes!,
                 width: size,
                 height: size,
@@ -51,12 +64,10 @@ class Avatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 alignment: Alignment.topCenter, // faces sit a touch high
                 gaplessPlayback: true,
-                // A corrupt/undecodable image falls back to the person icon
-                // instead of Flutter's broken-image box.
-                errorBuilder: (_, __, ___) => Icon(Icons.person,
-                    size: radius * 1.0, color: scheme.onPrimaryContainer),
-              ),
-            ),
+                errorBuilder: (_, __, ___) => fallback,
+              )
+            : fallback,
+      ),
     );
   }
 }

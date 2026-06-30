@@ -1,0 +1,34 @@
+name: Keep backend warm
+
+# The backend runs on Render's free plan, which spins the instance down after
+# ~15 min idle — the next request then pays a 30-50s cold start, which is the
+# single biggest source of post-login slowness. This pings /health on a schedule
+# so the instance stays awake during the hours students actually use the app.
+#
+# GitHub cron is UTC and best-effort (can lag a few minutes under load); a 10-min
+# cadence keeps comfortably under Render's idle window even with jitter. Costs
+# nothing and needs no secrets.
+
+on:
+  schedule:
+    # Every 10 minutes, 01:00-18:00 UTC ≈ 07:00-24:00 Bangladesh time (UTC+6) —
+    # the active window. Skipping the dead overnight hours avoids needless pings.
+    - cron: '*/10 1-18 * * *'
+  workflow_dispatch:
+
+# Don't pile up runs if one is slow.
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          # --max-time guards against the cold-start wakeup hanging the job; a
+          # failed ping is non-fatal (the next tick retries), so never fail the run.
+          curl -fsS --max-time 60 https://open-campus-sdsw.onrender.com/health \
+            && echo "Backend is awake." \
+            || echo "Ping failed (will retry next tick) — non-fatal."

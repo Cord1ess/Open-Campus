@@ -6,6 +6,7 @@ import '../common/coming_soon_page.dart';
 import '../services/faculty_schedule_page.dart';
 import '../services/gpa_calculator_page.dart';
 import '../services/registration_closed_page.dart';
+import '../services/tuition_tool_page.dart';
 import 'hub_page.dart';
 
 class ServicesHub extends StatelessWidget {
@@ -18,18 +19,26 @@ class ServicesHub extends StatelessWidget {
       header: _ServicesHeader(
         onGpa: (c) =>
             Navigator.of(c).push(sharedAxisRoute(const GpaCalculatorPage())),
-        onFaculty: (c) =>
-            Navigator.of(c).push(sharedAxisRoute(const FacultySchedulePage())),
+        onTuition: (c) =>
+            Navigator.of(c).push(sharedAxisRoute(const TuitionToolPage())),
       ),
       groups: [
         HubGroup('Tools', [
           HubFeature(
             icon: Icons.calculate_outlined,
-            title: 'GPA Tools',
-            subtitle: 'Calculator, goal & grade chart',
+            title: 'GPA Tool',
+            subtitle: 'Auto from your data, or manual',
             status: FeatureStatus.live,
             onTap: (c) => Navigator.of(c)
                 .push(sharedAxisRoute(const GpaCalculatorPage())),
+          ),
+          HubFeature(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Tuition Fee Tool',
+            subtitle: 'Your real bill, or an estimate',
+            status: FeatureStatus.live,
+            onTap: (c) =>
+                Navigator.of(c).push(sharedAxisRoute(const TuitionToolPage())),
           ),
           HubFeature(
             icon: Icons.people_outline,
@@ -95,11 +104,11 @@ class ServicesHub extends StatelessWidget {
   }
 }
 
-/// Two prominent quick-action tiles so the Services header isn't empty.
+/// Two prominent quick-action tiles for the flagship tools.
 class _ServicesHeader extends StatelessWidget {
   final void Function(BuildContext) onGpa;
-  final void Function(BuildContext) onFaculty;
-  const _ServicesHeader({required this.onGpa, required this.onFaculty});
+  final void Function(BuildContext) onTuition;
+  const _ServicesHeader({required this.onGpa, required this.onTuition});
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +119,7 @@ class _ServicesHeader extends StatelessWidget {
           Expanded(
             child: _ActionTile(
               icon: Icons.calculate_outlined,
-              title: 'GPA Tools',
+              title: 'GPA Tool',
               subtitle: 'Plan & project',
               accent: context.scheme.primary,
               onTap: () => onGpa(context),
@@ -119,11 +128,11 @@ class _ServicesHeader extends StatelessWidget {
           const SizedBox(width: Spacing.md),
           Expanded(
             child: _ActionTile(
-              icon: Icons.people_outline,
-              title: 'Faculty',
-              subtitle: 'Schedules',
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Tuition',
+              subtitle: 'Fees & installments',
               accent: context.scheme.secondary,
-              onTap: () => onFaculty(context),
+              onTap: () => onTuition(context),
             ),
           ),
         ],

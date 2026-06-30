@@ -14,9 +14,14 @@ dependencies:
   # HTTP client
   dio: ^5.7.0
   # Secure token storage (Keychain/Keystore on mobile; in-memory/IndexedDB on web)
-  flutter_secure_storage: ^9.2.2
+  # v10+ moved the web package to package:web/dart:js_interop, which is required
+  # for the WASM (skwasm) renderer — v9's flutter_secure_storage_web imported
+  # dart:html and blocked `flutter build web --wasm`.
+  flutter_secure_storage: ^10.0.0
   # On-device last-view cache (the stateless-server model)
   shared_preferences: ^2.3.3
+  # Browser APIs (Notification) for web — WASM-safe (dart:js_interop based)
+  web: ^1.1.0
   # Charts for the data-dense dashboard
   fl_chart: ^0.69.2
   # Google Fonts for the design system type

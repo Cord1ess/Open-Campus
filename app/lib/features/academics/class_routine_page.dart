@@ -27,7 +27,7 @@ class ClassRoutinePage extends ConsumerWidget {
     final state = ref.watch(homeProvider);
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () => ref.read(homeProvider.notifier).load(),
+        onRefresh: () => ref.read(homeProvider.notifier).load(force: true),
         child: CustomScrollView(
           slivers: [
             SliverCollapsingAppBar(title: 'Class Routine'),
@@ -41,7 +41,8 @@ class ClassRoutinePage extends ConsumerWidget {
                       title: 'Couldn\'t load',
                       subtitle: message,
                       actionLabel: 'Try again',
-                      onAction: () => ref.read(homeProvider.notifier).load(),
+                      onAction: () =>
+                          ref.read(homeProvider.notifier).load(force: true),
                     ),
                   ResData(:final loaded) => _Content(loaded.data.routine),
                 },

@@ -34,7 +34,11 @@ Color attendanceColor(BuildContext context, double pct) {
 class ResultsContent extends StatefulWidget {
   final ResultsData data;
   final bool showChart;
-  const ResultsContent(this.data, {super.key, this.showChart = true});
+  /// The big CGPA + latest-GPA header row. Hidden on the full Results page (which
+  /// has its own Overview card) so it isn't shown twice.
+  final bool showHeader;
+  const ResultsContent(this.data,
+      {super.key, this.showChart = true, this.showHeader = true});
 
   @override
   State<ResultsContent> createState() => _ResultsContentState();
@@ -59,37 +63,38 @@ class _ResultsContentState extends State<ResultsContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // CGPA + latest GPA side by side, both theme-colored.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            CountUp(cgpa,
-                style: context.text.displaySmall
-                    ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w800)),
-            const SizedBox(width: Spacing.sm),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text('CGPA',
-                  style: context.text.titleMedium
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-            ),
-            const Spacer(),
-            // Latest-term GPA chip in the secondary theme color.
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: Spacing.md, vertical: 6),
-              decoration: BoxDecoration(
-                color: scheme.tertiaryContainer,
-                borderRadius: BorderRadius.circular(Radii.full),
+        if (widget.showHeader)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              CountUp(cgpa,
+                  style: context.text.displaySmall?.copyWith(
+                      color: scheme.primary, fontWeight: FontWeight.w800)),
+              const SizedBox(width: Spacing.sm),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('CGPA',
+                    style: context.text.titleMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
               ),
-              child: Text('GPA ${latestGpa.toStringAsFixed(2)}',
-                  style: context.text.labelLarge?.copyWith(
-                      color: scheme.onTertiaryContainer,
-                      fontWeight: FontWeight.w800)),
-            ),
-          ],
-        ),
+              const Spacer(),
+              // Latest-term GPA chip in the secondary theme color.
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: Spacing.md, vertical: 6),
+                decoration: BoxDecoration(
+                  color: scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(Radii.full),
+                ),
+                child: Text('GPA ${latestGpa.toStringAsFixed(2)}',
+                    style: context.text.labelLarge?.copyWith(
+                        color: scheme.onTertiaryContainer,
+                        fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
         if (widget.showChart && ordered.length >= 2) ...[
-          const SizedBox(height: Spacing.lg),
+          if (widget.showHeader) const SizedBox(height: Spacing.lg),
           _GpaCgpaChart(ordered),
         ],
         // Accordion: the per-semester breakdown is hidden until expanded.

@@ -152,18 +152,24 @@ class _TrendChartState extends State<TrendChart> {
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 46,
+                    // Vertical labels need height, not width — reserve enough so
+                    // a rotated "Spring 2024" fully fits inside its column.
+                    reservedSize: 64,
                     interval: 1,
-                    getTitlesWidget: (v, _) {
+                    getTitlesWidget: (v, meta) {
                       final i = v.toInt();
                       if (i < 0 || i >= widget.labels.length || v != i) {
                         return const SizedBox();
                       }
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Transform.rotate(
-                          angle: -0.5,
+                      // Rotate a full 90° (vertical) so edge labels stay within
+                      // their own column instead of angling off the chart's side.
+                      return SideTitleWidget(
+                        axisSide: meta.axisSide,
+                        space: 8,
+                        child: RotatedBox(
+                          quarterTurns: 3, // -90°: reads bottom-to-top
                           child: Text(widget.labels[i],
+                              maxLines: 1,
                               style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -199,6 +205,11 @@ class _TrendChartState extends State<TrendChart> {
                 touchTooltipData: LineTouchTooltipData(
                   getTooltipColor: (_) => scheme.inverseSurface,
                   tooltipRoundedRadius: 12,
+                  // Keep the tooltip inside the chart bounds so an edge point's
+                  // box isn't clipped by the card — it shifts in instead of being
+                  // cut off.
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
                   tooltipPadding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 8),
                   // Show the term once as a heading, then each visible series'

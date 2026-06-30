@@ -54,11 +54,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Builder(builder: (context) {
         final scheme = theme.colorScheme;
         return Scaffold(
-          // Dimmed brand-tinted backdrop the modal floats over.
-          backgroundColor: const Color(0xFF0B1220),
+          // Light surface matching the login screen — the onboarding card floats
+          // on it with a soft drop shadow (no dark/dimmed backdrop).
+          backgroundColor: scheme.surface,
           body: Stack(
             children: [
-              const _Backdrop(),
               SafeArea(
                 child: Center(
                   child: ConstrainedBox(
@@ -67,11 +67,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       padding: const EdgeInsets.all(Spacing.xl),
                       child: SpringIn(
                         dy: 0.06,
-                        child: Material(
-                          color: scheme.surface,
-                          elevation: 16,
-                          shadowColor: Colors.black.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(Radii.xl),
+                        // Explicit layered drop shadow (not Material elevation,
+                        // which is too faint to read on a same-color background)
+                        // plus a hairline border, so the white card lifts clearly
+                        // off the white screen.
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: scheme.surface,
+                            borderRadius: BorderRadius.circular(Radii.xl),
+                            border: Border.all(
+                                color: scheme.outlineVariant
+                                    .withValues(alpha: 0.6),
+                                width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.10),
+                                blurRadius: 32,
+                                offset: const Offset(0, 12),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(Spacing.xl),
                             child: Column(
@@ -197,69 +217,6 @@ class _Card extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Subtle moving radial glows behind the modal for depth.
-class _Backdrop extends StatefulWidget {
-  const _Backdrop();
-  @override
-  State<_Backdrop> createState() => _BackdropState();
-}
-
-class _BackdropState extends State<_Backdrop>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(seconds: 12))
-        ..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) => CustomPaint(
-        size: Size.infinite,
-        painter: _BackdropPainter(_c.value),
-      ),
-    );
-  }
-}
-
-class _BackdropPainter extends CustomPainter {
-  final double t;
-  _BackdropPainter(this.t);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    void glow(Offset c, double r, Color color) {
-      final paint = Paint()
-        ..shader = RadialGradient(colors: [color, color.withValues(alpha: 0)])
-            .createShader(Rect.fromCircle(center: c, radius: r));
-      canvas.drawCircle(c, r, paint);
-    }
-
-    final a = 2 * math.pi * t;
-    glow(
-      Offset(size.width * (0.25 + 0.1 * math.sin(a)),
-          size.height * (0.22 + 0.06 * math.cos(a))),
-      size.shortestSide * 0.6,
-      AppColors.orange.withValues(alpha: 0.22),
-    );
-    glow(
-      Offset(size.width * (0.8 + 0.08 * math.cos(a)),
-          size.height * (0.78 + 0.06 * math.sin(a))),
-      size.shortestSide * 0.7,
-      AppColors.blue.withValues(alpha: 0.22),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _BackdropPainter old) => old.t != t;
 }
 
 // ---------------------------------------------------------------------------

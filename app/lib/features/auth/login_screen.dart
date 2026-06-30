@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/motion.dart';
-import '../../core/theme/theme_controller.dart';
 import '../../shared/brand_logo.dart';
 import '../../shared/widgets.dart';
 import '../about/about_page.dart';
@@ -95,15 +94,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Force the default Custom light theme so the entry screen is always
-    // on-brand, regardless of a previously saved preference.
-    final theme =
-        const ThemePrefs(seed: SeedSwatches.custom, mode: AppThemeMode.light)
-            .light;
-    return Theme(
-      data: theme,
-      child: Builder(builder: (context) => Scaffold(body: _layout(context))),
-    );
+    // Inherit the app theme (MaterialApp already applies the user's seed +
+    // light/dark/black), so the login screen tracks theme & accent changes live.
+    return Scaffold(body: _layout(context));
   }
 
   /// Centered login column at all widths.
@@ -140,13 +133,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           right: 0,
           child: SafeArea(
             child: Padding(
+              // Match the standard app-bar edge inset so the icon isn't jammed
+              // against the corner.
               padding: const EdgeInsets.all(Spacing.sm),
               child: IconButton(
                 onPressed: _openAbout,
                 tooltip: 'Settings',
-                iconSize: 28,
+                iconSize: 26,
                 color: scheme.onSurfaceVariant,
                 icon: const Icon(Icons.settings_outlined),
+                style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(Spacing.sm)),
               ),
             ),
           ),

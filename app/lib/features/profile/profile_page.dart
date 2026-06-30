@@ -45,14 +45,41 @@ class ProfilePage extends ConsumerWidget {
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [
-              FadeSlideIn(
-                child: _ProfileHeader(
-                    home: home, roll: roll, avatarBytes: avatar),
-              ),
-              if (home != null && _hasBio(home)) ...[
-                const SizedBox(height: Spacing.lg),
-                FadeSlideIn(delayMs: 60, child: _BioCard(home)),
-              ],
+              // Desktop (≥720): profile header on the left, personal info on the
+              // right, side by side. Mobile: stacked. Top-aligned so the shorter
+              // card doesn't stretch.
+              LayoutBuilder(builder: (context, c) {
+                final wide = c.maxWidth >= 720;
+                final header = FadeSlideIn(
+                  child: _ProfileHeader(
+                      home: home, roll: roll, avatarBytes: avatar),
+                );
+                final bio = (home != null && _hasBio(home))
+                    ? FadeSlideIn(delayMs: 60, child: _BioCard(home))
+                    : null;
+                if (!wide) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      header,
+                      if (bio != null) ...[
+                        const SizedBox(height: Spacing.lg),
+                        bio,
+                      ],
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: header),
+                    if (bio != null) ...[
+                      const SizedBox(width: Spacing.lg),
+                      Expanded(child: bio),
+                    ],
+                  ],
+                );
+              }),
               const SizedBox(height: Spacing.lg),
               FadeSlideIn(
                 delayMs: 80,
@@ -126,11 +153,13 @@ class _ProfileHeader extends StatelessWidget {
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Avatar(bytes: avatarBytes, radius: 44),
-          const SizedBox(height: Spacing.md),
+          // Smaller avatar (radius 36) so it never squashes inside the header,
+          // and reads cleanly when the header sits beside the info card on desktop.
+          Avatar(bytes: avatarBytes, radius: 36),
+          const SizedBox(height: Spacing.lg),
           Text(home?.name ?? 'Student',
-              textAlign: TextAlign.center,
               style: context.text.titleLarge
                   ?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: Spacing.sm),
