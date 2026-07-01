@@ -16,6 +16,15 @@ import 'features/onboarding/onboarding_state.dart';
 import 'features/shell/app_shell.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Edge-to-edge: let the app content draw BEHIND the status and navigation bars
+  // so the whole screen is one continuous surface (the modern Android look),
+  // instead of the OS drawing separate bar strips above/below the app (the older
+  // 2018-era look). Combined with the transparent overlay in build(), the bars
+  // become fully see-through. No-op on web/desktop.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
   // Make any framework error paint on screen instead of leaving a white page.
   ErrorWidget.builder = (FlutterErrorDetails details) => Material(
         child: Container(
@@ -50,6 +59,10 @@ class OpenCampusApp extends ConsumerWidget {
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: Colors.transparent,
+      // Kill the translucent scrim Android otherwise paints behind the nav bar
+      // (that grey/black wash is what makes the bar look like a separate strip).
+      systemNavigationBarContrastEnforced: false,
+      systemNavigationBarDividerColor: Colors.transparent,
       systemNavigationBarIconBrightness:
           isDark ? Brightness.light : Brightness.dark,
     );

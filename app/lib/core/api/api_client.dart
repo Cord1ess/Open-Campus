@@ -80,34 +80,51 @@ class ApiClient {
   /// Pings /health and reports the server status with round-trip latency.
   /// Distinguishes "online", "waking" (slow first response on a free tier),
   /// and "offline". Used by the About page's status indicator.
+  ///
+  /// Mirrors login()'s tolerance: a sleeping free-tier backend (Render) takes
+  /// 30-50s to wake, and the FIRST hit often fails with a connection error or a
+  /// timeout rather than a clean response. So we allow the full cold-start budget
+  /// and retry once on a cold-start-shaped failure before ever reporting offline
+  /// — otherwise the tester said "unreachable" while login (which already retries
+  /// with a 60s budget) succeeded moments later.
   Future<ServerStatus> healthCheck() async {
-    final sw = Stopwatch()..start();
-    try {
-      final r = await _dio.get('/health',
-          options: Options(
-            receiveTimeout: const Duration(seconds: 8),
-            sendTimeout: const Duration(seconds: 8),
-          ));
-      sw.stop();
-      if (r.statusCode == 200) {
-        // A slow first response usually means it just woke from sleep.
-        final state = sw.elapsedMilliseconds > 3000
-            ? ServerState.waking
-            : ServerState.online;
-        return ServerStatus(state, latencyMs: sw.elapsedMilliseconds);
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final sw = Stopwatch()..start();
+      try {
+        final r = await _dio.get('/health',
+            options: Options(
+              // Full cold-start budget, like the login/default timeouts.
+              receiveTimeout: const Duration(seconds: 60),
+              sendTimeout: const Duration(seconds: 60),
+            ));
+        sw.stop();
+        if (r.statusCode == 200) {
+          // A slow first response usually means it just woke from sleep.
+          final state = sw.elapsedMilliseconds > 3000
+              ? ServerState.waking
+              : ServerState.online;
+          return ServerStatus(state, latencyMs: sw.elapsedMilliseconds);
+        }
+        // A non-200 from a reachable server: it answered, so not "offline".
+        return ServerStatus(ServerState.online,
+            latencyMs: sw.elapsedMilliseconds);
+      } on DioException catch (e) {
+        sw.stop();
+        final coldStart = e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout;
+        // Retry once on a cold-start-shaped failure (the wakeup can drop the
+        // first connection); only the second failure is reported.
+        if (coldStart && attempt == 0) continue;
+        // A cold-start-shaped failure that persisted still most likely means the
+        // instance is waking, not truly down — match login's optimism.
+        return ServerStatus(
+            coldStart ? ServerState.waking : ServerState.offline);
+      } catch (_) {
+        return const ServerStatus(ServerState.offline);
       }
-      return const ServerStatus(ServerState.offline);
-    } on DioException catch (e) {
-      sw.stop();
-      // A timeout on the first hit is most likely a cold start, not a true down.
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        return const ServerStatus(ServerState.waking);
-      }
-      return const ServerStatus(ServerState.offline);
-    } catch (_) {
-      return const ServerStatus(ServerState.offline);
     }
+    return const ServerStatus(ServerState.waking);
   }
 
   /// POST /auth/login — returns the token on success. Retries once on a pure

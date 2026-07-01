@@ -112,8 +112,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SpringIn(child: BrandLogo(size: 96)),
-                  const SizedBox(height: Spacing.sm),
+                  const SpringIn(
+                      child: Center(child: BrandLogo(height: 72))),
+                  const SizedBox(height: Spacing.lg),
                   Text('Sign in with your UCAM account',
                       textAlign: TextAlign.center,
                       style: context.text.bodyMedium

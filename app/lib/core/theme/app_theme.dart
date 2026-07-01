@@ -98,6 +98,11 @@ class Motion {
 }
 
 class AppTheme {
+  /// The one typeface used everywhere (Inter, bundled static weights). Referenced
+  /// by ThemeData.fontFamily and any raw TextStyle in component themes so nothing
+  /// silently falls back to the platform default.
+  static const _fontFamily = 'Inter';
+
   static ThemeData light({Color seed = AppColors.seed}) =>
       _build(Brightness.light, seed: seed);
   static ThemeData dark({Color seed = AppColors.seed, bool black = false}) =>
@@ -143,6 +148,10 @@ class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
       splashFactory: InkSparkle.splashFactory,
+      // Inter everywhere — bundled static weights, no italics. Setting it on the
+      // ThemeData cascades to every text style (buttons, inputs, dialogs, etc.),
+      // not just the textTheme.
+      fontFamily: _fontFamily,
     );
 
     return base.copyWith(
@@ -190,17 +199,24 @@ class AppTheme {
         selectedIconTheme: IconThemeData(color: scheme.primary),
         unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
         selectedLabelTextStyle: TextStyle(
-            color: scheme.primary, fontWeight: FontWeight.w700, fontSize: 12),
+            fontFamily: _fontFamily,
+            color: scheme.primary,
+            fontWeight: FontWeight.w700,
+            fontSize: 12),
         unselectedLabelTextStyle: TextStyle(
-            color: scheme.onSurfaceVariant, fontSize: 12),
+            fontFamily: _fontFamily,
+            color: scheme.onSurfaceVariant,
+            fontSize: 12),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(Radii.md)),
-          textStyle:
-              const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          textStyle: const TextStyle(
+              fontFamily: _fontFamily,
+              fontWeight: FontWeight.w600,
+              fontSize: 15),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -228,7 +244,8 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: scheme.inverseSurface,
-        contentTextStyle: TextStyle(color: scheme.onInverseSurface),
+        contentTextStyle: TextStyle(
+            fontFamily: _fontFamily, color: scheme.onInverseSurface),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm)),
       ),

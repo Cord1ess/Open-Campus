@@ -446,11 +446,13 @@ class _ServerStatusCard extends StatelessWidget {
 
   (Color, String, String) _present(BuildContext context) {
     final s = status;
-    if (checking && s == null) {
+    if (checking) {
+      // While a ping is in flight, always show "Checking" — a cold start can take
+      // up to a minute, so don't leave a stale Online/Unreachable label showing.
       return (
         context.scheme.onSurfaceVariant,
         'Checking…',
-        'Pinging the server.'
+        'Pinging the server (a sleeping free-tier server can take up to a minute).'
       );
     }
     switch (s?.state) {

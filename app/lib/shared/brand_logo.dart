@@ -1,42 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-import '../core/theme/app_theme.dart';
-
-/// Combined Open Campus logo mark. PLACEHOLDER — replace with the real asset:
-/// drop a logo into assets/ and swap the body for Image.asset(...).
+/// Open Campus brand marks, rendered from the real optimized SVG assets.
 ///
-/// Designed as a single centered mark (icon + wordmark in one lockup), not a
-/// separate icon + text, per the desired login layout.
-class BrandLogo extends StatelessWidget {
+/// Two distinct marks (per the brand kit):
+///   * [BrandIcon] — the icon ONLY (blue + orange mark, no text).
+///   * [BrandLogo] — the full lockup: icon + "OPEN CAMPUS" wordmark.
+///
+/// The marks carry their own blue (#01badd) and orange (#f57f20) colors, and the
+/// wordmark is dark, so they are only ever placed on NEUTRAL surfaces (white /
+/// dark), never on an orange or blue fill. There is deliberately no "on colored
+/// background" variant.
+class _BrandAssets {
+  static const icon = 'assets/brand/open_campus_icon.svg';
+  static const logo = 'assets/brand/open_campus_logo.svg';
+}
+
+/// The icon-only mark. Square-ish (source viewBox ~159x168). [size] is the
+/// height in logical pixels; width scales to keep the aspect ratio.
+class BrandIcon extends StatelessWidget {
   final double size;
-  final bool onColor; // true when drawn on a colored (primary) background
-  const BrandLogo({super.key, this.size = 92, this.onColor = false});
+  const BrandIcon({super.key, this.size = 88});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final fg = onColor ? scheme.onPrimary : scheme.onSurface;
+    return SvgPicture.asset(
+      _BrandAssets.icon,
+      height: size,
+      // Semantics for screen readers; the mark is decorative-but-identifying.
+      semanticsLabel: 'Open Campus',
+    );
+  }
+}
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: AppColors.orange, // flat brand orange
-            borderRadius: BorderRadius.circular(size * 0.28),
-          ),
-          child: Icon(Icons.school_rounded,
-              size: size * 0.52, color: Colors.white),
-        ),
-        SizedBox(height: size * 0.18),
-        Text(
-          'Open Campus',
-          style: context.text.headlineSmall?.copyWith(
-              color: fg, fontWeight: FontWeight.w800, letterSpacing: -0.5),
-        ),
-      ],
+/// The full logo lockup (icon + wordmark). The source is a wide horizontal SVG
+/// (viewBox ~334x168), so [height] drives the size and width scales to fit.
+/// Optionally shown as a centered column ([stacked]) is NOT used — the brand
+/// lockup is a single horizontal artwork.
+class BrandLogo extends StatelessWidget {
+  final double height;
+  const BrandLogo({super.key, this.height = 56});
+
+  @override
+  Widget build(BuildContext context) {
+    return SvgPicture.asset(
+      _BrandAssets.logo,
+      height: height,
+      semanticsLabel: 'Open Campus',
     );
   }
 }

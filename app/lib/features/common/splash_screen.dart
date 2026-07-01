@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/motion.dart';
+import '../../shared/brand_logo.dart';
 
 /// Full-screen branded splash shown while the app boots / restores a session.
 class SplashScreen extends StatefulWidget {
@@ -42,24 +43,10 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Brand logo mark — orange tile with a blue gradient sheen
-                    // so the brand colors greet the user immediately.
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: AppColors.orange, // flat brand orange
-                        borderRadius: BorderRadius.circular(Radii.xl),
-                      ),
-                      child: const Icon(Icons.school_rounded,
-                          size: 52, color: Colors.white),
-                    ),
-                    const SizedBox(height: Spacing.xl),
-                    Text(
-                      'Open Campus',
-                      style: context.text.headlineMedium
-                          ?.copyWith(color: scheme.onSurface),
-                    ),
+                    // The full brand lockup (icon + wordmark) on the neutral
+                    // surface — matches the web boot loader and login screen for
+                    // a seamless hand-off.
+                    const BrandLogo(height: 68),
                     const SizedBox(height: Spacing.xxl),
                     SizedBox(
                       width: 28,

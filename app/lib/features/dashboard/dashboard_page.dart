@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/avatar.dart';
+import '../../shared/brand_logo.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets.dart';
 import '../academics/calendar_model.dart';
@@ -197,16 +198,9 @@ class _StickyHeaderBar extends ConsumerWidget {
       toolbarHeight: 64,
       title: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(Radii.sm),
-            ),
-            child:
-                Icon(Icons.school_rounded, size: 18, color: scheme.onPrimary),
-          ),
+          // The brand icon on the neutral app-bar surface (never on a colored
+          // tile), with the wordmark as text beside it.
+          const BrandIcon(size: 28),
           const SizedBox(width: Spacing.sm),
           Text('Open Campus',
               style: context.text.titleMedium

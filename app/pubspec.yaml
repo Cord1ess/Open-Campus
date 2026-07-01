@@ -24,12 +24,12 @@ dependencies:
   web: ^1.1.0
   # Charts for the data-dense dashboard
   fl_chart: ^0.69.2
-  # Google Fonts for the design system type
-  google_fonts: ^6.2.1
   # Open external links (exam-routine Google Sheets, etc.)
   url_launcher: ^6.3.1
   flutter_local_notifications: ^22.0.1
   timezone: ^0.11.0
+  # Renders the brand icon/logo SVGs crisply at any size (WASM-safe).
+  flutter_svg: ^2.0.10+1
 
 dev_dependencies:
   flutter_test:
@@ -38,3 +38,20 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/brand/
+  fonts:
+    # Inter, bundled as static weights (no italics) so the whole app renders in
+    # one consistent typeface on every platform — no runtime font fetch.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800

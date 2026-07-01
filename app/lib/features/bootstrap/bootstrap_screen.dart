@@ -105,7 +105,7 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SpringIn(child: Center(child: BrandLogo(size: 76))),
+                const SpringIn(child: Center(child: BrandLogo(height: 64))),
                 const SizedBox(height: Spacing.xxl),
                 Text(
                   name != null ? 'Welcome, $name' : 'Setting up your campus',
