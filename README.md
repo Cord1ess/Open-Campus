@@ -342,7 +342,7 @@ their respective owners.
 
 The app accesses only the data a student can already see in their own UCAM
 account, using that student's own credentials. It uses no UIU or Edusoft branding
-or assets, and it complies promptly with any takedown request from UIU or Edusoft.
+or assets.
 
 ---
 
