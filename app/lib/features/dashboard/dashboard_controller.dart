@@ -303,7 +303,8 @@ final markTrimestersProvider =
   final res = await api.getJson<List<TrimesterOption>>(
     '/student/marks/trimesters',
     (j) => (j as List)
-        .map((e) => TrimesterOption.fromJson((e as Map).cast<String, dynamic>()))
+        .whereType<Map>()
+        .map((e) => TrimesterOption.fromJson(e.cast<String, dynamic>()))
         .toList(),
   );
   return switch (res) {
@@ -312,26 +313,13 @@ final markTrimestersProvider =
   };
 });
 
-/// Item-wise marks for one trimester (keyed by its dropdown value). Driving the
-/// cascade is slow, so this is fetched on demand when the user picks a term.
-final marksProvider =
-    FutureProvider.family<MarksData, String>((ref, trimester) async {
-  final api = ref.read(apiClientProvider);
-  final res = await api.getJson<MarksData>(
-    '/student/marks?trimester=$trimester',
-    (j) => MarksData.fromJson(j as Map<String, dynamic>),
-  );
-  return switch (res) {
-    ApiOk(:final data) => data,
-    ApiUnauthorized() => throw Exception('Session ended. Please log in again.'),
-    ApiSessionExpired() => throw Exception('UCAM session expired.'),
-    ApiUnavailable(:final message) => throw Exception(message),
-  };
-});
-
 /// Public UIU notices, one page at a time (cached server-side). Keyed by page.
+/// keepAlive so paging back and forth (Newer/Older) doesn't re-scrape a page the
+/// user already loaded this session — the default autoDispose would drop each
+/// page the moment it's off-screen and re-fetch on return.
 final uiuNoticesProvider =
     FutureProvider.family<UiuNoticesData, int>((ref, page) async {
+  ref.keepAlive();
   final api = ref.read(apiClientProvider);
   final res = await api.getJson<UiuNoticesData>(
     '/calendar/notices/uiu?page=$page',
@@ -348,11 +336,15 @@ final uiuNoticesProvider =
 /// immediately and fetch each one's marks on demand. Keyed by trimester value.
 final markCoursesProvider =
     FutureProvider.family<List<TrimesterOption>, String>((ref, trimester) async {
+  // keepAlive: the marks cascade is N+1 UCAM postbacks; toggling between two
+  // trimesters shouldn't re-walk a course list already fetched this session.
+  ref.keepAlive();
   final api = ref.read(apiClientProvider);
   final res = await api.getJson<List<TrimesterOption>>(
     '/student/marks/courses?trimester=${Uri.encodeQueryComponent(trimester)}',
     (j) => (j as List)
-        .map((e) => TrimesterOption.fromJson((e as Map).cast<String, dynamic>()))
+        .whereType<Map>()
+        .map((e) => TrimesterOption.fromJson(e.cast<String, dynamic>()))
         .toList(),
   );
   return switch (res) {
@@ -369,6 +361,9 @@ typedef MarkCourseKey = ({String trimester, String course});
 
 final markCourseProvider =
     FutureProvider.family<CourseMarks?, MarkCourseKey>((ref, key) async {
+  // keepAlive: each course's marks are an expensive postback; re-opening a
+  // course (or trimester) already fetched this session should be instant.
+  ref.keepAlive();
   final api = ref.read(apiClientProvider);
   final res = await api.getJson<CourseMarks?>(
     '/student/marks/course?trimester=${Uri.encodeQueryComponent(key.trimester)}'

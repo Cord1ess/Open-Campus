@@ -43,17 +43,27 @@ class PlannedCourse {
   PlannedCourse({required this.label, required this.credit, this.gradePoint});
 }
 
-/// Weighted GPA of a set of (credit, gradePoint) pairs. Returns null if no
-/// credits. Courses with a null grade point are ignored.
-double? weightedGpa(Iterable<({double credit, double? point})> courses) {
+/// Weighted GPA + the credit base it was computed over, in ONE pass. Courses
+/// with a null grade point are ignored (they contribute to neither). `gpa` is
+/// null when no graded credits are present. Callers should use `credits` from
+/// here rather than re-summing separately, so the GPA and its credit base can't
+/// diverge.
+({double? gpa, double credits}) weightedGpaWithCredits(
+    Iterable<({double credit, double? point})> courses) {
   var cr = 0.0, qp = 0.0;
   for (final c in courses) {
     if (c.point == null) continue;
     cr += c.credit;
     qp += c.credit * c.point!;
   }
-  return cr == 0 ? null : qp / cr;
+  return (gpa: cr == 0 ? null : qp / cr, credits: cr);
 }
+
+/// Weighted GPA of a set of (credit, gradePoint) pairs. Returns null if no
+/// credits. Courses with a null grade point are ignored. (Thin wrapper over
+/// [weightedGpaWithCredits] for call sites that only need the GPA.)
+double? weightedGpa(Iterable<({double credit, double? point})> courses) =>
+    weightedGpaWithCredits(courses).gpa;
 
 /// Snap a numeric grade point to the nearest valid UIU letter (for display of a
 /// "needed grade").

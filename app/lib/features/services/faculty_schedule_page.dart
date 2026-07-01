@@ -57,7 +57,7 @@ class _FacultySchedulePageState extends State<FacultySchedulePage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverCollapsingAppBar(title: 'Faculty Schedules'),
+          const SliverCollapsingAppBar(title: 'Faculty Schedules'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [

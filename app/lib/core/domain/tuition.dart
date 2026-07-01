@@ -13,6 +13,11 @@
 //   • Admin = trimester fee + (late fee 500 if late registration).
 //   • Installments: 1st = 40% (of gross, or of net if waiverInFirstInstallment),
 //     remainder split 50/50 across 2nd & 3rd.
+//
+// NOTE: this 40-then-split model is the REFERENCE manual calculator's, and is
+// intentionally different from the official UIU 40/70/100 cumulative-threshold
+// plan in installments.dart (used on the live Balance & Dues page). Two distinct
+// tools, two models — don't merge them.
 
 import 'dart:math' as math;
 
@@ -216,11 +221,16 @@ String _pct(double v) =>
 String _cr(double v) =>
     v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
-/// Format a BDT amount the way the reference app does (no decimals + ৳).
+/// Format a BDT amount the way the reference app does (no decimals + ৳, Western
+/// 3-digit grouping). NOTE: deliberately NOT Bangladeshi lakh/crore (2-2-3)
+/// grouping — the manual Tuition tool is a faithful port of the reference
+/// calculator (kawsarcodes/uiu-calculator), which uses plain 3-digit grouping,
+/// and matching it keeps the two tools' numbers identical for users comparing
+/// them. Revisit only if the whole app moves to a locale-aware formatter.
 String formatBdt(num amount) {
   final n = amount.round();
   final s = n.abs().toString();
-  // Thousands separators.
+  // Thousands separators (3-digit groups).
   final buf = StringBuffer();
   for (var k = 0; k < s.length; k++) {
     if (k > 0 && (s.length - k) % 3 == 0) buf.write(',');

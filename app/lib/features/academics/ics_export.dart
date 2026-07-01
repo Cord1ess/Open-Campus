@@ -4,7 +4,7 @@ import 'google_calendar.dart';
 // on mobile/desktop. Chosen at compile time so neither dart:html nor
 // url_launcher leaks into the wrong platform.
 import 'ics_export_stub.dart'
-    if (dart.library.html) 'ics_export_web.dart'
+    if (dart.library.js_interop) 'ics_export_web.dart'
     if (dart.library.io) 'ics_export_io.dart';
 
 /// Exports the given events as an `.ics` file the user can import into Google

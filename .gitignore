@@ -1,20 +1,32 @@
+# NOTE: git treats an inline "# comment" after a pattern as part of the pattern,
+# so every comment here is on its own line.
+
 # --- Secrets & personal data (NEVER commit) ---
 .env
 *.env
 !.env.example
-*.har                      # captured traffic contains personal data + session cookies
-docs/captures/            # raw captures (personal data)
-backend/captures/         # captured academic data
+# Captured traffic: contains personal data + live session cookies.
+*.har
+# Raw captures (personal academic data / recon).
+backend/captures/
+docs/captures/
+
+# --- Internal docs (not part of the shipped app) ---
+# Working notes, audits, and captures. Internal only.
+docs/
 
 # --- Python ---
 backend/.venv/
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 # --- Databases ---
 *.db
@@ -27,9 +39,15 @@ app/build/
 app/.flutter-plugins
 app/.flutter-plugins-dependencies
 app/.metadata
-# Generated platform ephemeral files (created by `flutter create --platforms=...`)
+.pub-cache/
+.pub/
+# Generated platform ephemeral files (created by `flutter create --platforms=...`).
 app/android/.gradle/
 app/android/local.properties
+# Android release signing: never commit the keystore or its passwords.
+app/android/key.properties
+app/android/**/*.jks
+app/android/**/*.keystore
 app/**/GeneratedPluginRegistrant.*
 app/ios/Flutter/Generated.xcconfig
 app/ios/Flutter/flutter_export_environment.sh
@@ -37,8 +55,17 @@ app/ios/Flutter/flutter_export_environment.sh
 # --- Editors / OS ---
 .vscode/
 .idea/
+*.iml
 .DS_Store
+.AppleDouble
 Thumbs.db
+ehthumbs.db
+desktop.ini
 
-# Claude Code local tooling
+# --- Misc build / temp artifacts ---
+*.log
+*.tmp
+scratchpad/
+
+# --- Claude Code local tooling ---
 .claude/

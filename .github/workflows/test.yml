@@ -1,0 +1,42 @@
+name: Tests
+
+# Runs the backend (pytest) and app (flutter analyze + test) suites on every push
+# and PR. The web-deploy workflow waits for this to pass before publishing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # so deploy-web.yml can require it
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+      - name: pytest
+        working-directory: backend
+        run: python -m pytest -q
+
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Install deps
+        working-directory: app
+        run: flutter pub get
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze
+      - name: Test
+        working-directory: app
+        run: flutter test

@@ -81,14 +81,14 @@ class ProfilePage extends ConsumerWidget {
                 );
               }),
               const SizedBox(height: Spacing.lg),
-              FadeSlideIn(
+              const FadeSlideIn(
                 delayMs: 80,
                 child: SectionCard(
                   title: 'Your privacy',
                   icon: Icons.lock_outline,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       _Bullet('Your UCAM password is never stored.'),
                       _Bullet(
                           'We keep no copy of your data on our servers — everything is live.'),

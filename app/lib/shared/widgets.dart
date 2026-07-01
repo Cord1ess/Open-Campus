@@ -9,6 +9,38 @@ export '../core/theme/motion.dart'
 /// Freshness state for a section (live vs. cached-from-device).
 enum Freshness { live, cached }
 
+/// A Column whose children are separated by a hairline [Divider]. Replaces the
+/// `for (i > 0) Divider(); child` pattern that was copy-pasted across the
+/// dashboard, calendar, routine, and notices lists.
+class DividedColumn extends StatelessWidget {
+  final List<Widget> children;
+  final Color? color;
+  final double height;
+  final CrossAxisAlignment crossAxisAlignment;
+  const DividedColumn({
+    super.key,
+    required this.children,
+    this.color,
+    this.height = Spacing.lg,
+    this.crossAxisAlignment = CrossAxisAlignment.start,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final divColor = color ?? context.scheme.outlineVariant;
+    return Column(
+      crossAxisAlignment: crossAxisAlignment,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) Divider(height: height, color: divColor),
+          children[i],
+        ],
+      ],
+    );
+  }
+}
+
 /// A titled M3 card section.
 class SectionCard extends StatelessWidget {
   final String title;
@@ -128,6 +160,11 @@ class LoadingIndicator extends StatefulWidget {
 
 class _LoadingIndicatorState extends State<LoadingIndicator>
     with SingleTickerProviderStateMixin {
+  // vsync: this ties the controller to this element's Ticker, which Flutter
+  // pauses automatically when an ancestor TickerMode is disabled (e.g. the
+  // indicator sits under a route that's been covered), so an off-screen loader
+  // doesn't burn frames. Loaders are also short-lived (replaced by data), so the
+  // perpetual repeat is bounded in practice.
   late final AnimationController _halo =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
         ..repeat(reverse: true);

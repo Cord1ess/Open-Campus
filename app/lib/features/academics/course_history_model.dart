@@ -1,7 +1,8 @@
 // Course history model — mirrors GET /student/course-history.
 
-double? _numN(dynamic v) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
+double? _numN(dynamic v) => v is num
+    ? v.toDouble()
+    : (v is String ? double.tryParse(v.replaceAll(',', '')) : null);
 String? _strN(dynamic v) => v?.toString();
 
 class HistoryCourse {
@@ -118,10 +119,12 @@ class CourseHistoryData {
         waivedCredits: _numN(j['waived_credits']),
         probation: _strN(j['probation']),
         courses: ((j['courses'] as List?) ?? const [])
-            .map((e) => HistoryCourse.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => HistoryCourse.fromJson(e.cast<String, dynamic>()))
             .toList(),
         trimesterGpas: ((j['trimester_gpas'] as List?) ?? const [])
-            .map((e) => TrimesterGpa.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => TrimesterGpa.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

@@ -63,7 +63,8 @@ class NoticesData {
 
   factory NoticesData.fromJson(Map<String, dynamic> j) => NoticesData(
         notices: ((j['notices'] as List?) ?? const [])
-            .map((e) => Notice.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => Notice.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

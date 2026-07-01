@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # Minimum seconds between UCAM-bound requests for a single user session.
     per_user_min_interval_seconds: float = 1.0
 
+    # Trust the X-Forwarded-For header for the client IP used in rate limiting.
+    # Leave FALSE unless the app runs behind a reverse proxy that OVERWRITES XFF
+    # — otherwise any client can spoof the header and evade per-IP login limits.
+    # Set true on hosts like Render/Fly where the platform sets a trustworthy XFF.
+    trust_forwarded_for: bool = False
+
     # --- App ---
     # CORS: empty by default. A native Flutter app doesn't need CORS; only set
     # origins for a browser/web build, and never combine "*" with credentials.

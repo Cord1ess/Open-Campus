@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.auth import session_store
 from app.auth.deps import BearerToken, CurrentSession
 from app.auth.rate_limit import login_limiter
+from app.config import settings
 from app.ucam import client as ucam
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -20,11 +21,14 @@ log = logging.getLogger("open_campus.auth")
 
 
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP for rate limiting. Honors X-Forwarded-For (first
-    hop) when present — set by a reverse proxy — else the direct peer."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
+    """Best-effort client IP for rate limiting. Only honors X-Forwarded-For when
+    OC_TRUST_FORWARDED_FOR is set (i.e. behind a proxy that overwrites it) —
+    otherwise a client could spoof XFF to dodge the per-IP login limit. Default
+    is the direct peer."""
+    if settings.trust_forwarded_for:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            return xff.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 

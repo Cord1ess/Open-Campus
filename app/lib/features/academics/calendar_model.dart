@@ -41,11 +41,19 @@ class CalendarEvent {
         CalendarEventType.other => Icons.event_outlined,
       };
 
-  factory CalendarEvent.fromJson(Map<String, dynamic> j) {
+  /// [keyPrefix] namespaces the id (and thus the notification id) to a specific
+  /// calendar/term, so an event with the same date+title in two calendars —
+  /// e.g. the Undergraduate and Graduate "Eid Holiday" — gets a DISTINCT id.
+  /// Without it, both would collide: setting a reminder on one would toggle the
+  /// other, and their scheduled notifications would overwrite each other.
+  factory CalendarEvent.fromJson(Map<String, dynamic> j, {String keyPrefix = ''}) {
     final event = (j['event'] ?? '').toString();
     final start = _parseIso(j['start_date']) ?? DateTime(1970);
     return CalendarEvent(
-      id: '${j['start_date'] ?? ''}|$event',
+      // Include end date + day too, not just start+title, so same-day distinct
+      // events don't share an id within one calendar either.
+      id: '$keyPrefix|${j['start_date'] ?? ''}|${j['end_date'] ?? ''}'
+          '|${j['day'] ?? ''}|$event',
       title: event,
       detail: (j['day'] ?? '').toString(),
       date: start,
@@ -56,24 +64,51 @@ class CalendarEvent {
   }
 }
 
+/// Match a whole word (not a substring) so short tokens like "fee" don't fire on
+/// "coffee"/"feedback" and "class" on "classroom allocation".
+bool _hasWord(String text, String word) =>
+    RegExp('\\b${RegExp.escape(word)}\\b').hasMatch(text);
+
+/// Parse an installment ordinal from free text: "1st"/"2nd"/"3rd"/"4th" or the
+/// words "first".."fourth". Returns null if none present (caller falls back to
+/// encounter position). [text] is expected lower-cased.
+int? _parseOrdinal(String text) {
+  final digit = RegExp(r'\b([1-9])\s*(?:st|nd|rd|th)\b').firstMatch(text);
+  if (digit != null) return int.tryParse(digit.group(1)!);
+  const words = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4};
+  for (final entry in words.entries) {
+    if (_hasWord(text, entry.key)) return entry.value;
+  }
+  return null;
+}
+
 DateTime? _parseIso(dynamic v) =>
     v is String && v.isNotEmpty ? DateTime.tryParse(v) : null;
 
 CalendarEventType _inferType(String text) {
   final t = text.toLowerCase();
-  if (t.contains('registration') || t.contains('advising') || t.contains('add/drop') || t.contains('withdraw')) {
+  // Short/ambiguous tokens use whole-word matching (_hasWord); unambiguous
+  // longer phrases can stay as substrings.
+  if (t.contains('registration') || t.contains('advising') ||
+      t.contains('add/drop') || _hasWord(t, 'withdraw')) {
     return CalendarEventType.registration;
   }
-  if (t.contains('payment') || t.contains('installment') || t.contains('fee') || t.contains('fine') || t.contains('tuition')) {
+  if (t.contains('payment') || t.contains('installment') ||
+      t.contains('instalment') || t.contains('tuition') ||
+      _hasWord(t, 'fee') || _hasWord(t, 'fees') || _hasWord(t, 'fine')) {
     return CalendarEventType.payment;
   }
-  if (t.contains('exam') || t.contains('mid-term') || t.contains('midterm') || t.contains('final')) {
+  if (_hasWord(t, 'exam') || t.contains('mid-term') || t.contains('midterm') ||
+      _hasWord(t, 'final') || t.contains('finals')) {
     return CalendarEventType.exam;
   }
-  if (t.contains('holiday') || t.contains('eid') || t.contains('closed') || t.contains('vacation') || t.contains('puja') || t.contains('break')) {
+  if (t.contains('holiday') || _hasWord(t, 'eid') || t.contains('closed') ||
+      t.contains('vacation') || t.contains('puja') || _hasWord(t, 'break')) {
     return CalendarEventType.holiday;
   }
-  if (t.contains('class') || t.contains('semester begin') || t.contains('classes begin')) {
+  if (t.contains('semester begin') || t.contains('classes begin') ||
+      t.contains('class resume') || _hasWord(t, 'class') ||
+      _hasWord(t, 'classes')) {
     return CalendarEventType.classDay;
   }
   return CalendarEventType.other;
@@ -95,17 +130,25 @@ class AcademicCalendar {
     required this.events,
   });
 
-  factory AcademicCalendar.fromJson(Map<String, dynamic> j) => AcademicCalendar(
-        title: (j['title'] ?? '').toString(),
-        term: (j['term'] ?? '').toString(),
-        program: (j['program'] ?? '').toString(),
-        revised: j['revised'] == true,
-        events: ((j['events'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((e) => CalendarEvent.fromJson(e.cast<String, dynamic>()))
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date)),
-      );
+  factory AcademicCalendar.fromJson(Map<String, dynamic> j) {
+    final term = (j['term'] ?? '').toString();
+    final program = (j['program'] ?? '').toString();
+    // Namespace each event's id by term+program so identical events across two
+    // calendars don't collide (see CalendarEvent.fromJson keyPrefix).
+    final keyPrefix = '$term|$program';
+    return AcademicCalendar(
+      title: (j['title'] ?? '').toString(),
+      term: term,
+      program: program,
+      revised: j['revised'] == true,
+      events: ((j['events'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) =>
+              CalendarEvent.fromJson(e.cast<String, dynamic>(), keyPrefix: keyPrefix))
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date)),
+    );
+  }
 
   /// The next upcoming event (range not yet over). Null if all are past.
   CalendarEvent? get nextEvent {
@@ -136,9 +179,13 @@ class AcademicCalendar {
       if (e.type != CalendarEventType.payment) continue;
       final t = e.title.toLowerCase();
       if (!t.contains('installment') && !t.contains('instalment')) continue;
+      // Prefer the ordinal parsed from the title ("1st"/"first" installment) so
+      // the label is correct even when the calendar omits an earlier one; only
+      // fall back to encounter-position when the text has no ordinal.
+      final parsed = _parseOrdinal(t);
       // The deadline is the END of the range if it's a span, else the single date.
       out.add(InstallmentDeadline(
-        ordinal: out.length + 1,
+        ordinal: parsed ?? out.length + 1,
         deadline: e.endDate ?? e.date,
         title: e.title,
         dateText: e.dateText,

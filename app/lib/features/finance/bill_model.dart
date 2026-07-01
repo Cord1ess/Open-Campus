@@ -1,7 +1,10 @@
 // Bill model — mirrors GET /student/bill.
 
-double? _numN(dynamic v) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
+double? _numN(dynamic v) => v is num
+    ? v.toDouble()
+    // Strip comma thousands-separators so "6,500" parses (the backend sends bare
+    // numbers, but a cached/edge payload may carry a formatted string).
+    : (v is String ? double.tryParse(v.replaceAll(',', '')) : null);
 String? _strN(dynamic v) => v?.toString();
 
 class BillItem {
@@ -93,7 +96,10 @@ class BillData {
     if (terms.isEmpty) return null;
     int codeOf(String t) {
       final m = RegExp(r'\d+').firstMatch(t);
-      return m != null ? int.parse(m.group(0)!) : -1;
+      // tryParse (not parse): a very long digit run — or one that overflows JS's
+      // safe-int range on web — would otherwise throw FormatException and crash
+      // this getter, taking down the bill screen. Fall back to -1 (sorts last).
+      return m != null ? (int.tryParse(m.group(0)!) ?? -1) : -1;
     }
     terms.sort((a, b) => codeOf(b).compareTo(codeOf(a)));
     return terms.first;
@@ -105,7 +111,8 @@ class BillData {
         totalPaid: _numN(j['total_paid']),
         balance: _numN(j['balance']),
         items: ((j['items'] as List?) ?? const [])
-            .map((e) => BillItem.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => BillItem.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

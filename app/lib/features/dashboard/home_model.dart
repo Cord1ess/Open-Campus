@@ -1,8 +1,9 @@
 // Home summary model — mirrors the backend GET /student/home response
 // (parsed from StudentHome.aspx). Null-tolerant, like the other models.
 
-double? _numN(dynamic v) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
+double? _numN(dynamic v) => v is num
+    ? v.toDouble()
+    : (v is String ? double.tryParse(v.replaceAll(',', '')) : null);
 
 String? _strN(dynamic v) => v?.toString();
 
@@ -127,7 +128,8 @@ class HomeSummary {
             ? Term.fromJson((j['current_term'] as Map).cast<String, dynamic>())
             : null,
         nextTerms: ((j['next_terms'] as List?) ?? const [])
-            .map((e) => Term.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => Term.fromJson(e.cast<String, dynamic>()))
             .toList(),
         cgpa: _numN(j['cgpa']),
         completedCredits: _numN(j['completed_credits']),
@@ -139,7 +141,8 @@ class HomeSummary {
             ? Advisor.fromJson((j['advisor'] as Map).cast<String, dynamic>())
             : null,
         routine: ((j['routine'] as List?) ?? const [])
-            .map((e) => ClassSession.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => ClassSession.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

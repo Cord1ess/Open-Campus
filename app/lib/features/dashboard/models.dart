@@ -4,11 +4,13 @@
 // (e.g. an in-progress semester with no GPA yet), so missing/null fields default
 // rather than throw.
 
-double _num(dynamic v, [double fallback = 0]) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) ?? fallback : fallback);
+double _num(dynamic v, [double fallback = 0]) => v is num
+    ? v.toDouble()
+    : (v is String ? double.tryParse(v.replaceAll(',', '')) ?? fallback : fallback);
 
-int _int(dynamic v, [int fallback = 0]) =>
-    v is num ? v.toInt() : (v is String ? int.tryParse(v) ?? fallback : fallback);
+int _int(dynamic v, [int fallback = 0]) => v is num
+    ? v.toInt()
+    : (v is String ? int.tryParse(v.replaceAll(',', '')) ?? fallback : fallback);
 
 String _str(dynamic v, [String fallback = '']) => v?.toString() ?? fallback;
 

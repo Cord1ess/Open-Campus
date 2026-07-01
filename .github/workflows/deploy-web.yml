@@ -20,7 +20,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Gate the deploy on the full test suite (backend pytest + app analyze/test).
+  test:
+    uses: ./.github/workflows/test.yml
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

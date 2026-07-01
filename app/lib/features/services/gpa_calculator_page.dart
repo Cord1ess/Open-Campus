@@ -141,6 +141,9 @@ class _AutoGpaBody extends StatelessWidget {
     final out = <_RetakeGroup>[];
     byCode.forEach((code, attempts) {
       if (attempts.length < 2) return;
+      // Sort chronologically by the trimester's numeric code so `attempts.first`
+      // is genuinely the earliest attempt (the display reads "first → best").
+      attempts.sort((a, b) => _trimCode(a.trimester).compareTo(_trimCode(b.trimester)));
       out.add(_RetakeGroup(
         code: code,
         name: attempts.first.courseName ?? code,
@@ -148,6 +151,13 @@ class _AutoGpaBody extends StatelessWidget {
       ));
     });
     return out;
+  }
+
+  /// Leading numeric code of a trimester string (e.g. "233" → 233), for sorting.
+  static int _trimCode(String? t) {
+    if (t == null) return -1;
+    final m = RegExp(r'\d+').firstMatch(t);
+    return m != null ? (int.tryParse(m.group(0)!) ?? -1) : -1;
   }
 }
 
@@ -223,24 +233,32 @@ class _RunningProjectionCard extends StatefulWidget {
 }
 
 class _RunningProjectionCardState extends State<_RunningProjectionCard> {
-  // Expected grade point per running course (null = not yet chosen).
-  late final Map<String, double?> _expected = {
-    for (final c in widget.running) (c.courseCode ?? c.courseName ?? ''): 4.0,
+  // Expected grade point per running course, keyed by LIST INDEX (not course
+  // code/name — two running courses with a blank or duplicate code would
+  // otherwise share one entry and move together). null = not yet chosen.
+  late final Map<int, double?> _expected = {
+    for (var i = 0; i < widget.running.length; i++) i: 4.0,
   };
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final picked = widget.running
-        .map((c) => (
-              credit: c.credit ?? 3,
-              point: _expected[c.courseCode ?? c.courseName ?? ''],
-            ))
-        .toList();
-    final trimGpa = weightedGpa(picked);
-    final trimCredits = picked
-        .where((p) => p.point != null)
-        .fold<double>(0, (s, p) => s + p.credit);
+    // Only project courses whose credit is known — fabricating a credit would
+    // silently produce wrong quality points. Courses with an unknown credit are
+    // shown but excluded from the number, with a note below.
+    var unknownCredits = 0;
+    final picked = <({double credit, double? point})>[];
+    for (var i = 0; i < widget.running.length; i++) {
+      final c = widget.running[i];
+      if (c.credit == null) {
+        unknownCredits++;
+        continue;
+      }
+      picked.add((credit: c.credit!, point: _expected[i]));
+    }
+    final trim = weightedGpaWithCredits(picked);
+    final trimGpa = trim.gpa;
+    final trimCredits = trim.credits;
     final newCgpa = trimGpa == null
         ? widget.cgpa
         : projectedCgpa(
@@ -260,15 +278,24 @@ class _RunningProjectionCardState extends State<_RunningProjectionCard> {
               style: context.text.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           const SizedBox(height: Spacing.sm),
-          for (final c in widget.running) ...[
+          for (var i = 0; i < widget.running.length; i++) ...[
             _RunningRow(
-              course: c,
-              value: _expected[c.courseCode ?? c.courseName ?? ''],
-              onChanged: (v) => setState(
-                  () => _expected[c.courseCode ?? c.courseName ?? ''] = v),
+              course: widget.running[i],
+              value: _expected[i],
+              onChanged: (v) => setState(() => _expected[i] = v),
             ),
             Divider(height: Spacing.lg, color: scheme.outlineVariant),
           ],
+          if (unknownCredits > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: Spacing.xs),
+              child: Text(
+                  '$unknownCredits course${unknownCredits == 1 ? '' : 's'} with an '
+                  'unknown credit ${unknownCredits == 1 ? 'is' : 'are'} excluded '
+                  'from this projection.',
+                  style: context.text.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+            ),
           Row(
             children: [
               Expanded(
@@ -371,10 +398,13 @@ class _RetakeImpactCard extends StatelessWidget {
 
   Widget _retakeRow(BuildContext context, _RetakeGroup g) {
     final scheme = context.scheme;
-    // Best vs. first attempt (chronological order as returned).
+    // Best vs. first attempt (attempts are now sorted old→new).
     final first = g.attempts.first;
     final best = g.attempts.reduce((a, b) => (a.point ?? 0) >= (b.point ?? 0) ? a : b);
-    final credit = best.credit ?? first.credit ?? 3;
+    // Retakes almost always carry a credit; only assume the common 3-credit
+    // default as a last resort when UCAM omitted it for every attempt.
+    const kAssumedCredit = 3.0;
+    final credit = best.credit ?? first.credit ?? kAssumedCredit;
     final impact = retakeImpact(
       previousPoint: first.point ?? 0,
       newPoint: best.point ?? 0,

@@ -100,55 +100,69 @@ class _NavButton extends StatelessWidget {
     final iconSize = compact ? 22.0 : 24.0;
     final hPad = selected ? (compact ? 14.0 : 18.0) : (compact ? 12.0 : 14.0);
 
-    return SpringTap(
-      onTap: onTap,
-      pressScale: 0.9,
-      child: AnimatedContainer(
-        duration: Motion.medium,
-        curve: Motion.emphasizedDecelerate,
-        height: compact ? 48 : 52,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        padding: EdgeInsets.symmetric(horizontal: hPad),
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(Radii.full),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: Motion.fast,
-              transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-              child: Icon(
-                selected ? item.selectedIcon : item.icon,
-                key: ValueKey(selected),
-                color: fg,
-                size: iconSize,
-              ),
+    // Expose each tab as a selectable button with its label — even when the
+    // label is visually collapsed (widthFactor 0) on unselected items, so a
+    // screen reader can announce "Academics, tab, 2 of 4" etc. ExcludeSemantics
+    // on the visual row prevents the collapsed/duplicated inner text from also
+    // being read.
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      container: true,
+      child: ExcludeSemantics(
+        child: SpringTap(
+          onTap: onTap,
+          pressScale: 0.9,
+          child: AnimatedContainer(
+            duration: Motion.medium,
+            curve: Motion.emphasizedDecelerate,
+            height: compact ? 48 : 52,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: EdgeInsets.symmetric(horizontal: hPad),
+            decoration: BoxDecoration(
+              color: selected ? scheme.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(Radii.full),
             ),
-            // Label only on the selected item; width animates open/closed.
-            ClipRect(
-              child: AnimatedAlign(
-                duration: Motion.medium,
-                curve: Motion.emphasizedDecelerate,
-                alignment: Alignment.centerLeft,
-                widthFactor: selected ? 1.0 : 0.0,
-                child: Padding(
-                  padding: EdgeInsets.only(left: compact ? 6 : 8),
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.fade,
-                    style: (compact
-                            ? context.text.labelMedium
-                            : context.text.labelLarge)
-                        ?.copyWith(color: fg, fontWeight: FontWeight.w700),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSwitcher(
+                  duration: Motion.fast,
+                  transitionBuilder: (c, a) =>
+                      ScaleTransition(scale: a, child: c),
+                  child: Icon(
+                    selected ? item.selectedIcon : item.icon,
+                    key: ValueKey(selected),
+                    color: fg,
+                    size: iconSize,
                   ),
                 ),
-              ),
+                // Label only on the selected item; width animates open/closed.
+                ClipRect(
+                  child: AnimatedAlign(
+                    duration: Motion.medium,
+                    curve: Motion.emphasizedDecelerate,
+                    alignment: Alignment.centerLeft,
+                    widthFactor: selected ? 1.0 : 0.0,
+                    child: Padding(
+                      padding: EdgeInsets.only(left: compact ? 6 : 8),
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
+                        style: (compact
+                                ? context.text.labelMedium
+                                : context.text.labelLarge)
+                            ?.copyWith(color: fg, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -76,7 +76,11 @@ class ThemeController extends StateNotifier<ThemePrefs> {
     }
     state = ThemePrefs(
       seed: seed,
-      mode: modeVal != null && modeVal < AppThemeMode.values.length
+      // Guard both ends: a corrupted negative pref would pass a `< length` check
+      // and then throw RangeError on the list index.
+      mode: modeVal != null &&
+              modeVal >= 0 &&
+              modeVal < AppThemeMode.values.length
           ? AppThemeMode.values[modeVal]
           : AppThemeMode.light,
     );

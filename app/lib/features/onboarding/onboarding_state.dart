@@ -11,8 +11,15 @@ class OnboardingController extends StateNotifier<bool?> {
   static const _key = 'oc_onboarding_seen';
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    state = prefs.getBool(_key) ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getBool(_key) ?? false;
+    } catch (_) {
+      // If storage is unavailable, fall back to "needs onboarding" rather than
+      // leaving state == null forever (which would hang the launch flow on the
+      // splash screen indefinitely — _Root gates on onboardingSeen != null).
+      state = false;
+    }
   }
 
   Future<void> complete() async {

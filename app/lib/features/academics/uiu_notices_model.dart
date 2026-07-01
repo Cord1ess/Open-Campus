@@ -29,7 +29,8 @@ class UiuNoticesData {
 
   factory UiuNoticesData.fromJson(Map<String, dynamic> j) => UiuNoticesData(
         notices: ((j['notices'] as List?) ?? const [])
-            .map((e) => UiuNotice.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => UiuNotice.fromJson(e.cast<String, dynamic>()))
             .toList(),
         page: _intN(j['page']),
         totalPages: _intN(j['total_pages']),

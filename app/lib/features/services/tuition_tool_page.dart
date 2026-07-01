@@ -7,6 +7,7 @@ import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
 import '../finance/bill_model.dart';
+import 'numeric_input.dart';
 import 'tool_scaffold.dart';
 
 /// Tuition Fee Tool — Auto (your real UCAM bill) + Manual (estimate from inputs,
@@ -271,7 +272,9 @@ class _ManualTuitionState extends State<_ManualTuition> {
     super.dispose();
   }
 
-  double _num(TextEditingController c) => double.tryParse(c.text.trim()) ?? 0;
+  // Clamp to non-negative so a stray "-" can't produce a negative fee/credit
+  // that would flow into the tuition math.
+  double _num(TextEditingController c) => clampNonNeg(c.text) ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -368,6 +371,7 @@ class _ManualTuitionState extends State<_ManualTuition> {
     return TextField(
       controller: c,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: decimalInput,
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
         labelText: label,

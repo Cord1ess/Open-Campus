@@ -7,22 +7,52 @@ import '../core/theme/app_theme.dart';
 /// A profile avatar with a proper image fit, a soft shadow, and a fallback
 /// person icon. Using a sized ClipOval + Image.memory (BoxFit.cover, centered)
 /// avoids the "zoomed in" look CircleAvatar's foregroundImage can produce.
-class Avatar extends StatelessWidget {
+class Avatar extends StatefulWidget {
   final List<int>? bytes;
   final double radius;
   const Avatar({super.key, required this.bytes, this.radius = 22});
 
   @override
+  State<Avatar> createState() => _AvatarState();
+}
+
+class _AvatarState extends State<Avatar> {
+  // Cache the Uint8List so we don't copy the (potentially multi-MB) image bytes
+  // on every build, and so Image.memory's cache keys on a stable instance rather
+  // than re-decoding each frame. Rebuilt only when the source bytes change.
+  Uint8List? _imageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuildBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant Avatar old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.bytes, widget.bytes)) _rebuildBytes();
+  }
+
+  void _rebuildBytes() {
+    final b = widget.bytes;
+    _imageBytes = (b != null && b.isNotEmpty)
+        ? (b is Uint8List ? b : Uint8List.fromList(b))
+        : null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final radius = widget.radius;
     final size = radius * 2;
-    final hasImage = bytes != null && bytes!.isNotEmpty;
+    final imageBytes = _imageBytes;
+    final hasImage = imageBytes != null;
     // Decode the photo at display resolution (not full UCAM resolution) so a
     // large profile JPEG doesn't sit in memory as a multi-MB bitmap to draw a
     // small circle. cacheWidth/Height are in physical pixels, hence the DPR.
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final decodePx = (size * dpr).round();
-    final imageBytes = hasImage ? Uint8List.fromList(bytes!) : null;
 
     // Neutral fallback: a person glyph on a muted surface — no bright accent
     // circle that could bleed around the photo's edges or flash before it loads.
@@ -56,7 +86,7 @@ class Avatar extends StatelessWidget {
       child: ClipOval(
         child: hasImage
             ? Image.memory(
-                imageBytes!,
+                imageBytes,
                 width: size,
                 height: size,
                 cacheWidth: decodePx,

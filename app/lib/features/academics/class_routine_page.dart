@@ -138,20 +138,49 @@ class _NextClassHero extends StatefulWidget {
   State<_NextClassHero> createState() => _NextClassHeroState();
 }
 
-class _NextClassHeroState extends State<_NextClassHero> {
+class _NextClassHeroState extends State<_NextClassHero>
+    with WidgetsBindingObserver {
   Timer? _ticker;
+  // Only the countdown text listens to this — the gradient shell and the
+  // expensive routine scan do NOT rebuild every second.
+  final _now = ValueNotifier<DateTime>(DateTime.now());
 
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+    WidgetsBinding.instance.addObserver(this);
+    _startTicker();
+  }
+
+  void _startTicker() {
+    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) _now.value = DateTime.now();
     });
+  }
+
+  void _stopTicker() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Pause the per-second tick while the app is backgrounded — no point
+    // updating a countdown nobody can see (battery/CPU).
+    if (state == AppLifecycleState.resumed) {
+      _now.value = DateTime.now();
+      _startTicker();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _stopTicker();
+    }
   }
 
   @override
   void dispose() {
-    _ticker?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTicker();
+    _now.dispose();
     super.dispose();
   }
 
@@ -160,39 +189,9 @@ class _NextClassHeroState extends State<_NextClassHero> {
     final scheme = context.scheme;
     final accent = scheme.primary;
     final onAcc = scheme.onPrimary;
-    final now = DateTime.now();
 
-    // Is a class happening right now?
-    final ongoing = widget.routine.where((s) => isOngoing(s, now)).toList();
-    final next = nextClass(widget.routine, now);
-
-    Widget body;
-    if (ongoing.isNotEmpty) {
-      final s = ongoing.first;
-      body = _heroBody(
-        context,
-        onAcc,
-        kicker: 'In class now',
-        title: '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
-        sub: s.start != null && s.end != null ? '${s.start} – ${s.end}' : null,
-        big: 'LIVE',
-      );
-    } else if (next != null) {
-      final s = next.session;
-      final left = next.start.difference(now);
-      body = _heroBody(
-        context,
-        onAcc,
-        kicker: 'Next class · ${_dayLabel(next.start, now)}',
-        title: '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
-        sub: s.start != null && s.end != null ? '${s.start} – ${s.end}' : null,
-        big: _fmtCountdown(left),
-      );
-    } else {
-      body = _heroBody(context, onAcc,
-          kicker: 'Class routine', title: 'No upcoming classes', sub: null, big: null);
-    }
-
+    // The gradient shell is built ONCE per real change (theme/routine), not per
+    // tick. The ticking value only flows into the countdown Text below.
     return Container(
       padding: const EdgeInsets.all(Spacing.xl),
       decoration: BoxDecoration(
@@ -203,7 +202,40 @@ class _NextClassHeroState extends State<_NextClassHero> {
         ),
         borderRadius: BorderRadius.circular(Radii.lg),
       ),
-      child: body,
+      child: ValueListenableBuilder<DateTime>(
+        valueListenable: _now,
+        builder: (context, now, _) {
+          final ongoing = widget.routine.where((s) => isOngoing(s, now)).toList();
+          final next = nextClass(widget.routine, now);
+          if (ongoing.isNotEmpty) {
+            final s = ongoing.first;
+            return _heroBody(context, onAcc,
+                kicker: 'In class now',
+                title:
+                    '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
+                sub: s.start != null && s.end != null
+                    ? '${s.start} – ${s.end}'
+                    : null,
+                big: 'LIVE');
+          }
+          if (next != null) {
+            final s = next.session;
+            return _heroBody(context, onAcc,
+                kicker: 'Next class · ${_dayLabel(next.start, now)}',
+                title:
+                    '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
+                sub: s.start != null && s.end != null
+                    ? '${s.start} – ${s.end}'
+                    : null,
+                big: _fmtCountdown(next.start.difference(now)));
+          }
+          return _heroBody(context, onAcc,
+              kicker: 'Class routine',
+              title: 'No upcoming classes',
+              sub: null,
+              big: null);
+        },
+      ),
     );
   }
 

@@ -81,10 +81,10 @@ class ServicesHub extends StatelessWidget {
             )),
           ),
         ]),
-        HubGroup('Academic', [
+        const HubGroup('Academic', [
           // Course evaluation is important but UCAM currently keeps it OFF, so
           // we can't pull it yet — surfaced as coming-soon.
-          const HubFeature(
+          HubFeature(
             icon: Icons.rate_review_outlined,
             title: 'Course Evaluation',
             subtitle: 'Evaluate your courses',

@@ -16,12 +16,18 @@ class NotificationService {
 
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  // The academic calendar is a Bangladesh calendar: a "9 AM on the day" reminder
+  // means 9 AM *Dhaka time*, not 9 AM wherever the user's device happens to be.
+  // We schedule against this fixed zone using the reminder's wall-clock
+  // components (see scheduleAt) so it fires at the intended local-to-UIU time.
+  tz.Location? _campusZone;
 
   Future<void> init() async {
     if (_ready || kIsWeb) return;
     tzdata.initializeTimeZones();
     try {
-      tz.setLocalLocation(tz.getLocation('Asia/Dhaka'));
+      _campusZone = tz.getLocation('Asia/Dhaka');
+      tz.setLocalLocation(_campusZone!);
     } catch (_) {/* fall back to default local */}
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -60,7 +66,14 @@ class NotificationService {
   }) async {
     if (kIsWeb) return;
     await init();
-    if (when.isBefore(DateTime.now())) return;
+    // Interpret [when]'s wall-clock components in the campus zone (Dhaka) rather
+    // than converting the device-local instant — otherwise an off-Bangladesh
+    // device would fire the reminder shifted by its UTC offset difference.
+    final zone = _campusZone ?? tz.local;
+    final scheduled = tz.TZDateTime(
+        zone, when.year, when.month, when.day, when.hour, when.minute,
+        when.second);
+    if (scheduled.isBefore(tz.TZDateTime.now(zone))) return;
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         'oc_calendar',
@@ -75,7 +88,7 @@ class NotificationService {
       id: id,
       title: title,
       body: body,
-      scheduledDate: tz.TZDateTime.from(when, tz.local),
+      scheduledDate: scheduled,
       notificationDetails: details,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );

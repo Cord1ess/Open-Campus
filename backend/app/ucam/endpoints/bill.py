@@ -63,9 +63,11 @@ def parse_bill(html: str) -> BillResponse:
     # whole bill history and don't always reconcile to the live balance (the
     # authoritative current balance is the home page's FI_CurrentBalance), so
     # `balance` is intentionally left None here — the route fills it from home.
-    total_billed = sum((i.amount or 0) for i in items) or None
-    total_discount = sum((i.discount or 0) for i in items) or None
-    total_paid = sum((i.payment or 0) for i in items) or None
+    # Use None only when there are NO items at all; a legitimate zero total (e.g.
+    # a student with no discounts) must stay 0.0, not collapse to "—" in the app.
+    total_billed = sum((i.amount or 0) for i in items) if items else None
+    total_discount = sum((i.discount or 0) for i in items) if items else None
+    total_paid = sum((i.payment or 0) for i in items) if items else None
 
     return BillResponse(
         total_billed=total_billed,

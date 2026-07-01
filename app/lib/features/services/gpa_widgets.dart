@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/domain/grading.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import 'numeric_input.dart';
 
 /// A compact UIU-grade dropdown used across the GPA tool.
 class GradeDropdown extends StatelessWidget {
@@ -77,15 +78,18 @@ class _ManualCgpaCardState extends State<ManualCgpaCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final completed = double.tryParse(_completed.text.trim());
-    final currentCgpa = double.tryParse(_currentCgpa.text.trim());
+    // Clamp inputs to valid ranges before they reach the projection math: a CGPA
+    // is 0–4, completed credits are non-negative. Prevents nonsense projections
+    // from out-of-range typing (e.g. "9.9" CGPA, "-50" credits).
+    final completed = clampNonNeg(_completed.text);
+    final currentCgpa = clampCgpa(_currentCgpa.text);
 
-    // Projected CGPA: current standing + this trimester's planned courses.
-    final trimGpa = weightedGpa(
+    // Projected CGPA: current standing + this trimester's planned courses. GPA
+    // and its credit base come from ONE computation so they can't diverge.
+    final trim = weightedGpaWithCredits(
         _courses.map((c) => (credit: c.credit, point: c.gradePoint)));
-    final trimCredits = _courses
-        .where((c) => c.gradePoint != null)
-        .fold<double>(0, (s, c) => s + c.credit);
+    final trimGpa = trim.gpa;
+    final trimCredits = trim.credits;
     final canProject =
         completed != null && currentCgpa != null && trimGpa != null;
     final newCgpa = canProject
@@ -108,6 +112,7 @@ class _ManualCgpaCardState extends State<ManualCgpaCard> {
               child: TextField(
                 controller: _currentCgpa,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: decimalInput,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                     labelText: 'Current CGPA', isDense: true),
@@ -118,6 +123,7 @@ class _ManualCgpaCardState extends State<ManualCgpaCard> {
               child: TextField(
                 controller: _completed,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: decimalInput,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                     labelText: 'Completed credits', isDense: true),
@@ -411,7 +417,7 @@ class _TargetPlannerCardState extends State<TargetPlannerCard> {
 
   @override
   Widget build(BuildContext context) {
-    final next = double.tryParse(_nextCredits.text.trim()) ?? 0;
+    final next = clampNonNeg(_nextCredits.text) ?? 0;
     final plan = planNextTrimester(
       currentCgpa: widget.currentCgpa,
       completedCredits: widget.completedCredits,
@@ -423,7 +429,7 @@ class _TargetPlannerCardState extends State<TargetPlannerCard> {
       target: _target,
       nextCredits: _nextCredits,
       sliderMin: widget.currentCgpa.clamp(0, 4).toDouble(),
-      onTarget: (v) => setState(() => _target = v),
+      onTarget: (v) => setState(() => _target = v.clamp(0.0, 4.0)),
       onCreditsChanged: () => setState(() {}),
       plan: plan,
       autoFilled: widget.autoFilled,
@@ -456,9 +462,9 @@ class _ManualTargetCardState extends State<ManualTargetCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final current = double.tryParse(_current.text.trim());
-    final completed = double.tryParse(_completed.text.trim());
-    final next = double.tryParse(_nextCredits.text.trim()) ?? 0;
+    final current = clampCgpa(_current.text);
+    final completed = clampNonNeg(_completed.text);
+    final next = clampNonNeg(_nextCredits.text) ?? 0;
     final ready = current != null && completed != null;
     final sliderMin = (current ?? 0).clamp(0, 4).toDouble();
     final target = _target.clamp(sliderMin, 4.0);
@@ -482,6 +488,7 @@ class _ManualTargetCardState extends State<ManualTargetCard> {
               child: TextField(
                 controller: _current,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: decimalInput,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                     labelText: 'Current CGPA', isDense: true),
@@ -492,6 +499,7 @@ class _ManualTargetCardState extends State<ManualTargetCard> {
               child: TextField(
                 controller: _completed,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: decimalInput,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                     labelText: 'Completed credits', isDense: true),
@@ -509,7 +517,7 @@ class _ManualTargetCardState extends State<ManualTargetCard> {
               target: target,
               nextCredits: _nextCredits,
               sliderMin: sliderMin,
-              onTarget: (v) => setState(() => _target = v),
+              onTarget: (v) => setState(() => _target = v.clamp(0.0, 4.0)),
               onCreditsChanged: () => setState(() {}),
               plan: plan!,
               autoFilled: false,
@@ -580,6 +588,7 @@ class _TargetPlannerBody extends StatelessWidget {
         TextField(
           controller: nextCredits,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: decimalInput,
           onChanged: (_) => onCreditsChanged(),
           decoration: const InputDecoration(
               labelText: 'Next trimester credits', isDense: true),

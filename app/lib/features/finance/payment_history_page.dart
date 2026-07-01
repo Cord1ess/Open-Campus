@@ -70,7 +70,9 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
 /// trimesters sort newest-first. Non-coded groups (e.g. "Payments") sort last.
 int _termCode(String t) {
   final m = RegExp(r'\d+').firstMatch(t);
-  return m != null ? int.parse(m.group(0)!) : -1;
+  // tryParse guards against an over-long / overflowing digit run crashing the
+  // sort (see bill_model.currentTrimester). -1 sorts non-coded groups last.
+  return m != null ? (int.tryParse(m.group(0)!) ?? -1) : -1;
 }
 
 class _Content extends StatelessWidget {

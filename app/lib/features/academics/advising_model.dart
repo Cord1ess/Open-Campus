@@ -1,7 +1,8 @@
 // Advising model — mirrors GET /student/advising.
 
-double? _numN(dynamic v) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
+double? _numN(dynamic v) => v is num
+    ? v.toDouble()
+    : (v is String ? double.tryParse(v.replaceAll(',', '')) : null);
 String? _strN(dynamic v) => v?.toString();
 
 class OfferedCourse {
@@ -47,10 +48,12 @@ class AdvisingData {
 
   factory AdvisingData.fromJson(Map<String, dynamic> j) => AdvisingData(
         offered: ((j['offered'] as List?) ?? const [])
-            .map((e) => OfferedCourse.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => OfferedCourse.fromJson(e.cast<String, dynamic>()))
             .toList(),
         taken: ((j['taken'] as List?) ?? const [])
-            .map((e) => OfferedCourse.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => OfferedCourse.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

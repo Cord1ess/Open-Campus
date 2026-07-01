@@ -20,7 +20,7 @@ class ExamRoutinePage extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverCollapsingAppBar(title: 'Exam Routine'),
+          const SliverCollapsingAppBar(title: 'Exam Routine'),
           SliverPadding(
             padding: const EdgeInsets.all(Spacing.lg),
             sliver: SliverList.list(children: [

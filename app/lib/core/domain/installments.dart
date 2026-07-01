@@ -1,5 +1,11 @@
 // UIU installment payment logic. See memory: uiu-grading-finance-rules.
 //
+// NOTE: this is the OFFICIAL UIU 40/70/100 cumulative-threshold plan, shown on
+// the live Balance & Dues page (bill_page.dart) for a registered fee. It is
+// DELIBERATELY DIFFERENT from tuition.dart's installment split (40% then the
+// remainder halved), which is a faithful port of the reference *manual*
+// calculator. Do not "reconcile" the two — they model different things.
+//
 // From the registered Tuition+Trimester fee, students may pay in 3 installments:
 //   1st: 40% by date (else ৳500 fine)
 //   2nd: 70% cumulative by date (else ৳500 fine)

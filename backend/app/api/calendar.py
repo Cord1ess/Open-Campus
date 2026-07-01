@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.auth.rate_limit import SlidingWindowLimiter
+from app.config import settings
 from app.schemas.student import (
     AcademicCalendar,
     AcademicCalendarResponse,
@@ -37,9 +38,11 @@ _rate = SlidingWindowLimiter(max_events=60, window_seconds=60)
 
 
 def _client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
+    # Only trust XFF behind a proxy that overwrites it (see config); else spoofable.
+    if settings.trust_forwarded_for:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            return xff.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 

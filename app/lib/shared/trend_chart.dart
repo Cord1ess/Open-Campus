@@ -39,6 +39,10 @@ class TrendChart extends StatefulWidget {
 
 class _TrendChartState extends State<TrendChart> {
   late List<bool> _on;
+  // Animate the draw-in only on the first paint (and when the data itself
+  // changes), NOT on a legend toggle — replaying the 650ms draw-in every time a
+  // user flips a series on/off is wasteful and visually noisy.
+  bool _animateNext = true;
 
   @override
   void initState() {
@@ -51,6 +55,10 @@ class _TrendChartState extends State<TrendChart> {
     super.didUpdateWidget(old);
     if (old.series.length != widget.series.length) {
       _on = List<bool>.filled(widget.series.length, true);
+    }
+    // New data (labels or series changed) → animate the redraw.
+    if (old.labels != widget.labels || old.series != widget.series) {
+      _animateNext = true;
     }
   }
 
@@ -80,6 +88,14 @@ class _TrendChartState extends State<TrendChart> {
     final scheme = context.scheme;
     final (minY, maxY) = _range();
     final interval = ((maxY - minY) / 3).clamp(0.01, double.infinity);
+    // Consume the animate-once flag after this frame so an unrelated later
+    // rebuild doesn't replay the draw-in. (didUpdateWidget re-arms it on data
+    // change; the legend onTap disarms it.)
+    if (_animateNext) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _animateNext = false;
+      });
+    }
 
     final bars = <LineChartBarData>[];
     for (var i = 0; i < widget.series.length; i++) {
@@ -120,113 +136,141 @@ class _TrendChartState extends State<TrendChart> {
       ));
     }
 
+    // A screen-reader summary so the chart isn't invisible to assistive tech:
+    // read each active series' name and its latest (last non-null) value.
+    final summaryParts = <String>[];
+    for (var i = 0; i < widget.series.length; i++) {
+      if (!_on[i]) continue;
+      final s = widget.series[i];
+      double? latest;
+      for (final v in s.values.reversed) {
+        if (v != null) {
+          latest = v;
+          break;
+        }
+      }
+      if (latest != null) {
+        summaryParts.add('${s.name} latest ${latest.toStringAsFixed(2)}');
+      }
+    }
+    final chartSemanticLabel = summaryParts.isEmpty
+        ? 'Trend chart'
+        : 'Trend chart. ${summaryParts.join('. ')}.';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Isolate the chart's draw-in animation so it doesn't repaint the page.
         RepaintBoundary(
-        child: SizedBox(
-          height: widget.height,
-          child: LineChart(
-            // Animate the line drawing in (and re-animate when toggling series)
-            // so the chart feels lively rather than static.
-            duration: const Duration(milliseconds: 650),
-            curve: Curves.easeOutCubic,
-            LineChartData(
-              minY: minY,
-              maxY: maxY,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: interval,
-                getDrawingHorizontalLine: (_) =>
-                    FlLine(color: scheme.outlineVariant, strokeWidth: 1),
-              ),
-              titlesData: FlTitlesData(
-                // No left Y-axis labels — the exact tick numbers (which could
-                // read like impossible >4.0 values due to padding) added noise.
-                // Values are shown precisely in the hover tooltip instead.
-                leftTitles: const AxisTitles(),
-                rightTitles: const AxisTitles(),
-                topTitles: const AxisTitles(),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 52,
-                    interval: 1,
-                    getTitlesWidget: (v, meta) {
-                      final i = v.toInt();
-                      if (i < 0 || i >= widget.labels.length || v != i) {
-                        return const SizedBox();
-                      }
-                      // Middle labels keep a gentle ~-30° angle (readable, no
-                      // overlap). Only the EDGE labels (first/last) go fully
-                      // vertical so they don't spill off the chart's sides.
-                      final isEdge = i == 0 || i == widget.labels.length - 1;
-                      final text = Text(widget.labels[i],
-                          maxLines: 1,
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onSurface));
-                      return SideTitleWidget(
-                        axisSide: meta.axisSide,
-                        space: 8,
-                        child: isEdge
-                            ? RotatedBox(quarterTurns: 3, child: text)
-                            : Transform.rotate(angle: -0.5, child: text),
-                      );
-                    },
+          child: Semantics(
+            label: chartSemanticLabel,
+            child: SizedBox(
+              height: widget.height,
+              child: LineChart(
+                // Animate the draw-in on first paint / data change, but NOT on a
+                // legend toggle (see _animateNext) — replaying it each toggle was
+                // wasteful and noisy.
+                duration: _animateNext
+                    ? const Duration(milliseconds: 650)
+                    : Duration.zero,
+                curve: Curves.easeOutCubic,
+                LineChartData(
+                  minY: minY,
+                  maxY: maxY,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: interval,
+                    getDrawingHorizontalLine: (_) =>
+                        FlLine(color: scheme.outlineVariant, strokeWidth: 1),
                   ),
+                  titlesData: FlTitlesData(
+                    // No left Y-axis labels — the exact tick numbers (which could
+                    // read like impossible >4.0 values due to padding) added noise.
+                    // Values are shown precisely in the hover tooltip instead.
+                    leftTitles: const AxisTitles(),
+                    rightTitles: const AxisTitles(),
+                    topTitles: const AxisTitles(),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 52,
+                        interval: 1,
+                        getTitlesWidget: (v, meta) {
+                          final i = v.toInt();
+                          if (i < 0 || i >= widget.labels.length || v != i) {
+                            return const SizedBox();
+                          }
+                          // Middle labels keep a gentle ~-30° angle (readable, no
+                          // overlap). Only the EDGE labels (first/last) go fully
+                          // vertical so they don't spill off the chart's sides.
+                          final isEdge =
+                              i == 0 || i == widget.labels.length - 1;
+                          final text = Text(widget.labels[i],
+                              maxLines: 1,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurface));
+                          return SideTitleWidget(
+                            axisSide: meta.axisSide,
+                            space: 8,
+                            child: isEdge
+                                ? RotatedBox(quarterTurns: 3, child: text)
+                                : Transform.rotate(angle: -0.5, child: text),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  lineTouchData: LineTouchData(
+                    // Easier to land on a point and less twitchy: a generous touch
+                    // radius means the tooltip doesn't flicker as you move slightly,
+                    // and it doesn't require pixel-perfect hovering.
+                    touchSpotThreshold: 24,
+                    getTouchedSpotIndicator: (bar, indexes) => indexes
+                        .map((i) => TouchedSpotIndicatorData(
+                              FlLine(
+                                  color: bar.color ?? scheme.primary,
+                                  strokeWidth: 2),
+                              FlDotData(
+                                getDotPainter: (sp, _, __, ___) =>
+                                    FlDotCirclePainter(
+                                  radius: 5,
+                                  color: bar.color ?? scheme.primary,
+                                  strokeColor: scheme.surface,
+                                  strokeWidth: 2.5,
+                                ),
+                              ),
+                            ))
+                        .toList(),
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (_) => scheme.inverseSurface,
+                      tooltipRoundedRadius: 12,
+                      // Keep the tooltip inside the chart bounds so an edge point's
+                      // box isn't clipped by the card — it shifts in instead of being
+                      // cut off.
+                      fitInsideHorizontally: true,
+                      fitInsideVertically: true,
+                      tooltipPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      // Show the term once as a heading, then each visible series'
+                      // value, color-tinted so GPA vs CGPA is unmistakable.
+                      getTooltipItems: (spots) {
+                        final activeIdx = _activeIndices();
+                        return [
+                          for (var k = 0; k < spots.length; k++)
+                            _tooltipItem(spots[k], k, activeIdx, scheme),
+                        ];
+                      },
+                    ),
+                  ),
+                  lineBarsData: bars,
                 ),
               ),
-              borderData: FlBorderData(show: false),
-              lineTouchData: LineTouchData(
-                // Easier to land on a point and less twitchy: a generous touch
-                // radius means the tooltip doesn't flicker as you move slightly,
-                // and it doesn't require pixel-perfect hovering.
-                touchSpotThreshold: 24,
-                getTouchedSpotIndicator: (bar, indexes) => indexes
-                    .map((i) => TouchedSpotIndicatorData(
-                          FlLine(
-                              color: bar.color ?? scheme.primary,
-                              strokeWidth: 2),
-                          FlDotData(
-                            getDotPainter: (sp, _, __, ___) =>
-                                FlDotCirclePainter(
-                              radius: 5,
-                              color: bar.color ?? scheme.primary,
-                              strokeColor: scheme.surface,
-                              strokeWidth: 2.5,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-                touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => scheme.inverseSurface,
-                  tooltipRoundedRadius: 12,
-                  // Keep the tooltip inside the chart bounds so an edge point's
-                  // box isn't clipped by the card — it shifts in instead of being
-                  // cut off.
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  tooltipPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  // Show the term once as a heading, then each visible series'
-                  // value, color-tinted so GPA vs CGPA is unmistakable.
-                  getTooltipItems: (spots) {
-                    final activeIdx = _activeIndices();
-                    return [
-                      for (var k = 0; k < spots.length; k++)
-                        _tooltipItem(spots[k], k, activeIdx, scheme),
-                    ];
-                  },
-                ),
-              ),
-              lineBarsData: bars,
             ),
           ),
-        ),
         ),
         const SizedBox(height: Spacing.md),
         Wrap(
@@ -239,6 +283,7 @@ class _TrendChartState extends State<TrendChart> {
                 color: widget.series[i].color,
                 on: _on[i],
                 onTap: () => setState(() {
+                  _animateNext = false; // toggling shouldn't replay the draw-in
                   // Keep at least one series on.
                   if (_on[i] && _activeCount() == 1) return;
                   _on[i] = !_on[i];
@@ -271,9 +316,8 @@ class _TrendChartState extends State<TrendChart> {
         : null;
     final name = series?.name ?? '';
     final color = series?.color ?? scheme.onInverseSurface;
-    final label = sp.x.toInt() < widget.labels.length
-        ? widget.labels[sp.x.toInt()]
-        : '';
+    final label =
+        sp.x.toInt() < widget.labels.length ? widget.labels[sp.x.toInt()] : '';
 
     return LineTooltipItem(
       '',

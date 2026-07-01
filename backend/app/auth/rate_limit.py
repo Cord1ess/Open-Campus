@@ -12,7 +12,7 @@ doesn't relay a flood of login attempts upstream.
 from __future__ import annotations
 
 import time
-from collections import defaultdict, deque
+from collections import deque
 from threading import Lock
 
 
@@ -20,8 +20,15 @@ class SlidingWindowLimiter:
     def __init__(self, max_events: int, window_seconds: float) -> None:
         self._max = max_events
         self._window = window_seconds
-        self._hits: dict[str, deque[float]] = defaultdict(deque)
+        # A plain dict (not defaultdict): we insert a bucket only when we actually
+        # record a hit, and prune buckets once their newest hit ages out, so the
+        # map doesn't grow unbounded with one-off IPs that never come back.
+        self._hits: dict[str, deque[float]] = {}
         self._lock = Lock()
+        # Sweep stale buckets every N checks (cheap, amortized) rather than on a
+        # timer — keeps this dependency-free and process-local.
+        self._checks_since_sweep = 0
+        self._sweep_every = 256
 
     def check(self, key: str) -> bool:
         """Record an attempt for [key]. Returns True if allowed, False if the
@@ -29,17 +36,29 @@ class SlidingWindowLimiter:
         now = time.monotonic()
         cutoff = now - self._window
         with self._lock:
-            q = self._hits[key]
+            self._checks_since_sweep += 1
+            if self._checks_since_sweep >= self._sweep_every:
+                self._sweep(now)
+                self._checks_since_sweep = 0
+
+            q = self._hits.get(key)
+            if q is None:
+                self._hits[key] = deque([now])
+                return True
             while q and q[0] < cutoff:
                 q.popleft()
             if len(q) >= self._max:
                 return False
             q.append(now)
-            # Opportunistically drop empty buckets so the dict doesn't grow
-            # unbounded with one-off IPs.
-            if not q:
-                self._hits.pop(key, None)
             return True
+
+    def _sweep(self, now: float) -> None:
+        """Drop buckets whose newest hit has fully aged out of the window, so the
+        dict doesn't accumulate stale one-off IPs. Caller holds the lock."""
+        cutoff = now - self._window
+        stale = [k for k, q in self._hits.items() if not q or q[-1] < cutoff]
+        for k in stale:
+            self._hits.pop(k, None)
 
     def retry_after(self, key: str) -> int:
         """Seconds until the oldest in-window hit for [key] expires."""

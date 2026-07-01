@@ -76,7 +76,11 @@ class GoogleCalendar {
       final exclusiveEnd = (e.endDate ?? e.date).add(const Duration(days: 1));
       lines
         ..add('BEGIN:VEVENT')
-        ..add('UID:${e.notificationId}@opencampus')
+        // UID must be globally unique & stable (RFC 5545 §3.8.4.7). Use the raw
+        // event id (escaped), NOT a 31-bit hashCode — two events whose hashes
+        // collide would otherwise share a UID and calendar apps would treat them
+        // as the same event (silently dropping/overwriting one on import).
+        ..add('UID:${_esc(e.id)}@opencampus')
         ..add('DTSTAMP:$stamp')
         ..add('DTSTART;VALUE=DATE:${_ymd(start)}')
         ..add('DTEND;VALUE=DATE:${_ymd(exclusiveEnd)}')

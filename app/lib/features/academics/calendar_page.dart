@@ -593,7 +593,11 @@ class _DetailPanel extends StatelessWidget {
                     child: SwitchListTile(
                       value: reminderOn,
                       title: const Text('Remind me'),
-                      subtitle: const Text('Browser notification'),
+                      // On native we schedule a real OS notification at 9am on
+                      // the day; on web it's a browser confirmation only.
+                      subtitle: const Text(kIsWeb
+                          ? 'Browser notification'
+                          : 'Notification at 9am on the day'),
                       onChanged: onToggleReminder,
                     ),
                   ),

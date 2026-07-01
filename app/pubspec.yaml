@@ -1,7 +1,7 @@
 name: open_campus
 description: "Open Campus — unofficial companion app for UIU's UCAM portal."
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.5.0+5
 
 environment:
   sdk: ^3.5.0

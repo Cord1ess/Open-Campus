@@ -1,9 +1,11 @@
 // Marks model — mirrors GET /student/marks?trimester=<v>.
 
-double? _numN(dynamic v) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
-int? _intN(dynamic v) =>
-    v is num ? v.toInt() : (v is String ? int.tryParse(v) : null);
+double? _numN(dynamic v) => v is num
+    ? v.toDouble()
+    : (v is String ? double.tryParse(v.replaceAll(',', '')) : null);
+int? _intN(dynamic v) => v is num
+    ? v.toInt()
+    : (v is String ? int.tryParse(v.replaceAll(',', '')) : null);
 String? _strN(dynamic v) => v?.toString();
 
 class MarkComponent {
@@ -69,7 +71,8 @@ class CourseMarks {
         totalClass: _intN(j['total_class']),
         present: _intN(j['present']),
         components: ((j['components'] as List?) ?? const [])
-            .map((e) => MarkComponent.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => MarkComponent.fromJson(e.cast<String, dynamic>()))
             .toList(),
         totalObtained: _numN(j['total_obtained']),
         totalMax: _numN(j['total_max']),
@@ -92,7 +95,8 @@ class MarksData {
 
   factory MarksData.fromJson(Map<String, dynamic> j) => MarksData(
         courses: ((j['courses'] as List?) ?? const [])
-            .map((e) => CourseMarks.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => CourseMarks.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 

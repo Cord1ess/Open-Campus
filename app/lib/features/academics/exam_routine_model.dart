@@ -19,8 +19,8 @@ class ExamRoutineData {
 
   factory ExamRoutineData.fromJson(Map<String, dynamic> j) => ExamRoutineData(
         routines: ((j['routines'] as List?) ?? const [])
-            .map((e) =>
-                ExamRoutineLink.fromJson((e as Map).cast<String, dynamic>()))
+            .whereType<Map>()
+            .map((e) => ExamRoutineLink.fromJson(e.cast<String, dynamic>()))
             .toList(),
       );
 }
