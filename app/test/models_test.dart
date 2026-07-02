@@ -65,6 +65,152 @@ void main() {
       expect(a.amount, 3.0);
       expect(b.amount, 3.0);
     });
+
+    test('statementByTrimester interleaves + assigns payments by date', () {
+      // Real-shape data: bills carry a trimester, payments do not. A payment
+      // dated between Spring's bills and Fall's bills belongs to Spring.
+      final d = BillData.fromJson({
+        'items': [
+          // newest first, as UCAM sends
+          {'fee_type': 'Student Payment', 'payment': 15100, 'date': '14-Jun-26'},
+          {'fee_type': 'Tuition Fee', 'course_code': 'CSE 3411', 'amount': 16575,
+           'trimester': '2026 Spring', 'date': '25-Feb-26'},
+          {'fee_type': 'Student Payment', 'payment': 23800, 'date': '10-Dec-25'},
+          {'fee_type': 'Tuition Fee', 'course_code': 'CSE 4165', 'amount': 16575,
+           'trimester': '2025 Fall', 'date': '09-Nov-25'},
+        ],
+      });
+      final st = d.statementByTrimester;
+      // Two terms, newest (2026 Spring) first.
+      expect(st.keys.toList(), ['2026 Spring', '2025 Fall']);
+      // Spring holds its bill AND the 14-Jun payment that followed it.
+      final spring = st['2026 Spring']!;
+      expect(spring.length, 2);
+      // Within the term, newest first: the 14-Jun payment before the 25-Feb bill.
+      expect(spring.first.isPayment, isTrue);
+      expect(spring.first.date, '14-Jun-26');
+      expect(spring.last.courseCode, 'CSE 3411');
+      // Fall holds its bill + the 10-Dec payment that followed it.
+      final fall = st['2025 Fall']!;
+      expect(fall.length, 2);
+      expect(fall.any((i) => i.isPayment && i.payment == 23800), isTrue);
+    });
+
+    // --- Edge cases: other students' accounts differ a lot ------------------
+
+    test('empty account: no items -> empty statement, null current term', () {
+      final d = BillData.fromJson({'items': []});
+      expect(d.statementByTrimester, isEmpty);
+      expect(d.currentTrimester, isNull);
+    });
+
+    test('payments-only account (no bills) -> single Payments bucket', () {
+      final d = BillData.fromJson({
+        'items': [
+          {'fee_type': 'Student Payment', 'payment': 5000, 'date': '10-Jan-26'},
+          {'fee_type': 'Student Payment', 'payment': 3000, 'date': '05-Jan-26'},
+        ],
+      });
+      final st = d.statementByTrimester;
+      expect(st.keys.toList(), [BillData.paymentsBucket]);
+      expect(st[BillData.paymentsBucket]!.length, 2);
+      // Newest first within the bucket.
+      expect(st[BillData.paymentsBucket]!.first.date, '10-Jan-26');
+    });
+
+    test('discount-only row classifies as adjustment, not a blank charge', () {
+      final item = BillItem.fromJson({
+        'fee_type': 'Retake Discount',
+        'course_code': 'MATH 2183',
+        'discount': -8287.5,
+        'trimester': '2025 Fall',
+        'date': '09-Nov-25',
+      });
+      expect(item.kind, BillKind.adjustment);
+      expect(item.isPayment, isFalse);
+      expect(item.isAdjustment, isTrue);
+      // A waiver reduces what's owed.
+      expect(item.signedAmount, -8287.5);
+    });
+
+    test('charge vs payment vs adjustment signedAmount math', () {
+      final charge =
+          BillItem.fromJson({'fee_type': 'Tuition Fee', 'amount': 16575});
+      final payment =
+          BillItem.fromJson({'fee_type': 'Student Payment', 'payment': 10000});
+      final waiver =
+          BillItem.fromJson({'fee_type': 'Waiver', 'discount': -5000});
+      expect(charge.signedAmount, 16575);
+      expect(payment.signedAmount, -10000);
+      expect(waiver.signedAmount, -5000);
+    });
+
+    test('undated items do not crash and sort deterministically', () {
+      final d = BillData.fromJson({
+        'items': [
+          {'fee_type': 'Tuition Fee', 'amount': 100, 'trimester': '2026 Spring'},
+          {'fee_type': 'Student Payment', 'payment': 100}, // no date, no term
+        ],
+      });
+      final st = d.statementByTrimester;
+      // Everything lands under the one billed term; no throw.
+      expect(st.keys.toList(), ['2026 Spring']);
+      expect(st['2026 Spring']!.length, 2);
+    });
+
+    test('season-aware current term: Fall beats Spring within/across years', () {
+      // Bill-page format is "YYYY Season" (no bracket code). Fall 2025 is newer
+      // than Spring 2025, and Spring 2026 newer than both.
+      final d = BillData.fromJson({
+        'items': [
+          {'fee_type': 'Tuition Fee', 'amount': 1, 'trimester': '2025 Spring',
+           'date': '01-Feb-25'},
+          {'fee_type': 'Tuition Fee', 'amount': 1, 'trimester': '2025 Fall',
+           'date': '01-Nov-25'},
+          {'fee_type': 'Tuition Fee', 'amount': 1, 'trimester': '2026 Spring',
+           'date': '01-Feb-26'},
+        ],
+      });
+      expect(d.currentTrimester, '2026 Spring');
+    });
+
+    test('bracket-code term format also orders newest-first', () {
+      final d = BillData.fromJson({
+        'items': [
+          {'fee_type': 'Fee', 'amount': 1, 'trimester': '[253] Fall 2025'},
+          {'fee_type': 'Fee', 'amount': 1, 'trimester': '[261] Spring 2026'},
+        ],
+      });
+      expect(d.currentTrimester, '[261] Spring 2026');
+    });
+
+    test('alternate date formats parse (DD/MM/YYYY, ISO)', () {
+      expect(BillItem.fromJson({'date': '25/02/2026'}).parsedDate,
+          DateTime(2026, 2, 25));
+      expect(BillItem.fromJson({'date': '2026-02-25'}).parsedDate,
+          DateTime(2026, 2, 25));
+      expect(BillItem.fromJson({'date': '25-Feb-2026'}).parsedDate,
+          DateTime(2026, 2, 25));
+      // Garbage / out-of-range -> null, not a wrong date.
+      expect(BillItem.fromJson({'date': '31-02-26'}).parsedDate, isNull);
+      expect(BillItem.fromJson({'date': 'whenever'}).parsedDate, isNull);
+    });
+
+    test('parses payment methods and tolerates missing/malformed entries', () {
+      final d = BillData.fromJson({
+        'balance': -25,
+        'payment_methods': [
+          {'code': 'bk', 'name': 'bKash'},
+          {'code': 'vs', 'name': 'Visa'},
+          null,
+          'garbage',
+        ],
+      });
+      expect(d.paymentMethods.length, 2);
+      expect(d.paymentMethods.first.code, 'bk');
+      expect(d.paymentMethods.first.name, 'bKash');
+      expect(d.hasDue, isFalse); // -25 balance = advance
+    });
   });
 
   group('HomeSummary.fromJson', () {

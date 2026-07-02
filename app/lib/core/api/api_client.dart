@@ -42,8 +42,13 @@ class ServerStatus {
 /// Thin wrapper over dio. Injects the bearer token; maps status codes to
 /// ApiResult so screens never deal with raw HTTP.
 class ApiClient {
-  ApiClient({String? Function()? tokenProvider})
-      : _tokenProvider = tokenProvider,
+  ApiClient({
+    String? Function()? tokenProvider,
+    void Function()? onSessionExpired,
+    // Injectable transport for tests (a fake HttpClientAdapter). Null in prod.
+    HttpClientAdapter? adapter,
+  })  : _tokenProvider = tokenProvider,
+        _onSessionExpired = onSessionExpired,
         _dio = Dio(BaseOptions(
           baseUrl: ApiConfig.baseUrl,
           // A free-tier backend (e.g. Render) can be asleep and take 30–50s to
@@ -54,6 +59,7 @@ class ApiClient {
           // We handle non-2xx ourselves rather than throwing.
           validateStatus: (_) => true,
         )) {
+    if (adapter != null) _dio.httpClientAdapter = adapter;
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
         final token = _tokenProvider?.call();
@@ -67,6 +73,7 @@ class ApiClient {
 
   final Dio _dio;
   final String? Function()? _tokenProvider;
+  final void Function()? _onSessionExpired;
 
   /// Fire-and-forget warm-up. Pings /health so a sleeping free-tier backend
   /// starts waking while the user is still typing credentials. Never throws.
@@ -167,31 +174,52 @@ class ApiClient {
   }
 
   /// Generic authenticated GET that maps status codes to ApiResult.
+  ///
+  /// Session-expiry (409) is CONFIRMED, not trusted on the first hit: the very
+  /// first 409 could be a momentary blip (UCAM briefly served a login page while
+  /// the session was actually fine). So on a 409 we retry the same call once
+  /// after a short delay; only if it 409s AGAIN do we treat the session as truly
+  /// expired — firing the global onSessionExpired signal (which raises the
+  /// blocking overlay) and returning ApiSessionExpired. A transient 409
+  /// self-heals on the retry and the user never sees the overlay. This is what
+  /// stops false "session expired" prompts during active use right after login.
   Future<ApiResult<T>> getJson<T>(
       String path, T Function(dynamic json) parse) async {
-    try {
-      final r = await _dio.get(path);
-      switch (r.statusCode) {
-        case 200:
-          try {
-            return ApiOk(parse(r.data));
-          } catch (e) {
-            // Parsing failed (unexpected JSON shape) — surface it instead of
-            // hanging the UI on a skeleton forever.
-            return ApiUnavailable('Couldn\'t read the data: $e');
-          }
-        case 401:
-          return const ApiUnauthorized();
-        case 409:
-          return const ApiSessionExpired();
-        default:
-          return ApiUnavailable(_detail(r) ?? 'Service unavailable.');
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final r = await _dio.get(path);
+        switch (r.statusCode) {
+          case 200:
+            try {
+              return ApiOk(parse(r.data));
+            } catch (e) {
+              // Parsing failed (unexpected JSON shape) — surface it instead of
+              // hanging the UI on a skeleton forever.
+              return ApiUnavailable('Couldn\'t read the data: $e');
+            }
+          case 401:
+            return const ApiUnauthorized();
+          case 409:
+            // First 409 → confirm with one retry before concluding expiry.
+            if (attempt == 0) {
+              await Future<void>.delayed(const Duration(milliseconds: 500));
+              continue;
+            }
+            // Second 409 → genuinely expired.
+            _onSessionExpired?.call();
+            return const ApiSessionExpired();
+          default:
+            return ApiUnavailable(_detail(r) ?? 'Service unavailable.');
+        }
+      } on DioException catch (e) {
+        return ApiUnavailable(_dioMessage(e));
+      } catch (e) {
+        return ApiUnavailable('Unexpected error: $e');
       }
-    } on DioException catch (e) {
-      return ApiUnavailable(_dioMessage(e));
-    } catch (e) {
-      return ApiUnavailable('Unexpected error: $e');
     }
+    // Unreachable in practice (the loop returns on every path), but satisfies
+    // the analyzer.
+    return const ApiSessionExpired();
   }
 
   /// Authenticated GET returning raw bytes (e.g. the avatar image proxy).

@@ -1,4 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// A transparent system-bar overlay whose icon brightness follows the APP theme
+/// ([isDark]) — NOT the OS dark-mode setting. Used app-wide (root + every app
+/// bar) so the status/navigation bars are see-through and the app's own surface
+/// shows behind them as one continuous background, regardless of whether the
+/// phone's system theme matches the in-app theme.
+SystemUiOverlayStyle appBarOverlayStyle(bool isDark) => SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarContrastEnforced: false,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+    );
 
 /// Open Campus — Material 3 design system.
 ///

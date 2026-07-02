@@ -14,5 +14,17 @@
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- Edge-to-edge: transparent status & navigation bars so the app content
+             (Flutter, which is theme-aware) draws behind them as one continuous
+             surface. Without transparent bars, the native window color shows
+             through and can mismatch the in-app theme (e.g. a white bar while the
+             app is in dark mode, because the OS-selected values-* folder tracks
+             the SYSTEM dark-mode setting, not the app's own theme choice). -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Don't let Android enforce a contrast scrim behind the bars. -->
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
     </style>
 </resources>

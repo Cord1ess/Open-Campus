@@ -88,14 +88,14 @@ class _Content extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = d.byTrimester;
-    // Current-term tuition+trimester fee = charges (not payments) in the most
-    // recent trimester, picked deterministically (highest term code) so the
-    // installment breakdown isn't tied to backend ordering.
+    // Current-term tuition+trimester fee = the CHARGE rows (not payments, not
+    // waiver adjustments) in the most recent trimester, picked deterministically
+    // (season-aware) so the installment breakdown isn't tied to backend ordering.
     final currentTerm = d.currentTrimester;
     final currentFee = currentTerm == null
         ? 0.0
         : (groups[currentTerm] ?? const [])
-            .where((i) => !i.isPayment)
+            .where((i) => i.kind == BillKind.charge)
             .fold<double>(0, (s, i) => s + (i.amount ?? 0));
 
     return Column(
@@ -109,9 +109,79 @@ class _Content extends StatelessWidget {
             child: _InstallmentCard(fee: currentFee, term: currentTerm),
           ),
         ],
+        if (d.paymentMethods.isNotEmpty) ...[
+          const SizedBox(height: Spacing.lg),
+          FadeSlideIn(
+              delayMs: 80, child: _PaymentMethodsCard(d.paymentMethods)),
+        ],
         const SizedBox(height: Spacing.lg),
         const FadeSlideIn(delayMs: 100, child: _HistoryLink()),
       ],
+    );
+  }
+}
+
+/// The online-payment methods UCAM accepts — shown for information. Paying opens
+/// UCAM's own payment page in the browser (we never handle money in-app).
+class _PaymentMethodsCard extends StatelessWidget {
+  final List<PaymentMethod> methods;
+  const _PaymentMethodsCard(this.methods);
+
+  IconData _iconFor(String code) => switch (code) {
+        'bk' => Icons.account_balance_wallet_outlined, // bKash (mobile wallet)
+        'nx' => Icons.account_balance_outlined, // DBBL Nexus (bank card)
+        _ => Icons.credit_card_outlined, // Visa / Master / AmEx
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return SectionCard(
+      title: 'Pay online',
+      icon: Icons.payment_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('UCAM accepts these payment methods:',
+              style: context.text.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: Spacing.md),
+          Wrap(
+            spacing: Spacing.sm,
+            runSpacing: Spacing.sm,
+            children: [
+              for (final m in methods)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: Spacing.md, vertical: Spacing.sm),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_iconFor(m.code),
+                          size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Text(m.name,
+                          style: context.text.labelMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: Spacing.md),
+          Text(
+            'To pay, open the payment page on UCAM. Open Campus never handles '
+            'your payment or card details.',
+            style: context.text.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }

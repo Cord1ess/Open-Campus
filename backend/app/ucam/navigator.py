@@ -16,7 +16,12 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from app.config import settings
-from app.ucam.client import UcamSession
+from app.ucam.client import (
+    UcamSession,
+    UcamSessionExpired,
+    _is_login_url,
+    _looks_like_login_page,
+)
 
 # href="...SomePage.aspx?mmi=abc123" — internal links carrying a nav token.
 _LINK_RE = re.compile(r'href="([^"]*\.aspx\?mmi=[0-9a-fA-F]+)"', re.IGNORECASE)
@@ -88,6 +93,13 @@ async def fetch_page(session: UcamSession, page_path: str) -> str:
 
     Falls back to a bare GET if the token can't be discovered (better to try than
     to fail outright). Sets the Referer to the landing page, as the browser does.
+
+    Raises UcamSessionExpired ONLY on positive evidence the session died (401/403
+    or the page is actually the UCAM login form / a redirect back to it) — the
+    same tight rule as call_page_method, so HTML pages (bill, course history,
+    marks, advising) surface expiry the same way the JSON PageMethods do, instead
+    of silently returning a login page that parses to an empty screen. A merely
+    odd response is left to the parser rather than being called an expiry.
     """
     url = await resolve_page_url(session, page_path)
     if url is None:
@@ -96,6 +108,11 @@ async def fetch_page(session: UcamSession, page_path: str) -> str:
         resp = await session.client.get(
             url,
             headers={"Referer": session.landing_url or settings.ucam_base_url},
+        )
+    if resp.status_code in (401, 403) or _is_login_url(str(resp.url)) or \
+            _looks_like_login_page(resp.text):
+        raise UcamSessionExpired(
+            f"{page_path}: session expired (bounced to login)."
         )
     resp.raise_for_status()
     return resp.text

@@ -481,15 +481,36 @@ async def call_page_method(
     # Check HTTP status FIRST so a real 5xx isn't misreported as session-expiry.
     if resp.status_code >= 500:
         raise UcamError(f"PageMethod {method} returned HTTP {resp.status_code}.")
-    # An expired session yields an HTML login page (often 200/302→login) or 401/403.
+
     ctype = resp.headers.get("content-type", "")
-    if resp.status_code in (401, 403) or "json" not in ctype or _looks_like_login_page(resp.text):
+    resp_url = str(getattr(resp, "url", "") or "")
+    landed_on_login = _looks_like_login_page(resp.text) or _is_login_url(resp_url)
+
+    # ONLY declare the session expired on POSITIVE evidence it's dead:
+    #   * 401/403 (unauthorized), or
+    #   * the response is actually the UCAM login page / a redirect back to it.
+    # A merely non-JSON response is NOT proof of expiry — it can be a transient
+    # blip (slow/empty body, a WAF/redirect hiccup, a maintenance splash) while
+    # the session is still perfectly valid. Treating that as expiry caused false
+    # "session expired" prompts during active use, so it's a transient UcamError
+    # (→ 502 "try again") instead, and the app can retry without logging out.
+    if resp.status_code in (401, 403) or landed_on_login:
         raise UcamSessionExpired(
-            f"PageMethod {method} did not return JSON; session likely expired."
+            f"PageMethod {method}: session expired (status {resp.status_code}, "
+            f"login_page={landed_on_login})."
         )
     if resp.status_code >= 400:
         raise UcamError(f"PageMethod {method} returned HTTP {resp.status_code}.")
+    if "json" not in ctype.lower():
+        # Reachable, authenticated, but the body isn't the JSON we expected —
+        # transient, not an expiry. Retriable.
+        raise UcamError(
+            f"PageMethod {method} returned non-JSON ({ctype!r}); transient."
+        )
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise UcamError(f"PageMethod {method} returned invalid JSON.") from exc
     # ASP.NET wraps the real payload in {"d": ...}.
     return data.get("d") if isinstance(data, dict) and "d" in data else data

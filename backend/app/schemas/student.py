@@ -171,12 +171,21 @@ class BillItem(BaseModel):
     remark: str | None = None
 
 
+class PaymentMethod(BaseModel):
+    """An online-payment method UCAM accepts (display only; the app deep-links to
+    UCAM's own payment page rather than handling money)."""
+
+    code: str                          # "bk", "vs", "ms", "nx", "mx"
+    name: str                          # "bKash", "Visa", ...
+
+
 class BillResponse(BaseModel):
     total_billed: float | None = None
     total_discount: float | None = None
     total_paid: float | None = None
     balance: float | None = None      # >0 due, <0 advance
     items: list[BillItem] = []
+    payment_methods: list[PaymentMethod] = []
 
 
 # --- Pre-advising (parsed from PreAdvising.aspx) ---

@@ -75,8 +75,9 @@ class DashboardPage extends ConsumerWidget {
     ref.listen(attendanceProvider, (_, next) => onUnauthorized(next));
     ref.listen(homeProvider, (_, next) => onUnauthorized(next));
 
-    final expired = (results is ResData<ResultsData> && results.sessionExpired) ||
-        (attendance is ResData<AttendanceData> && attendance.sessionExpired);
+    // NOTE: UCAM session expiry (409) is now handled GLOBALLY by
+    // SessionExpiredOverlay (a blocking app-wide prompt), so there's no longer a
+    // per-dashboard re-login banner — every screen reacts at once.
 
     return Scaffold(
       body: RefreshIndicator(
@@ -97,14 +98,6 @@ class DashboardPage extends ConsumerWidget {
                 attendance: attendance,
               ),
             ),
-            if (expired)
-              SliverToBoxAdapter(
-                child: ReloginBanner(
-                  onRelogin: () => ref
-                      .read(authControllerProvider.notifier)
-                      .logout(message: 'Please log in again for live data.'),
-                ),
-              ),
             SliverPadding(
               padding: const EdgeInsets.all(Spacing.lg),
               sliver: SliverList.list(children: [
@@ -194,6 +187,9 @@ class _StickyHeaderBar extends ConsumerWidget {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       automaticallyImplyLeading: false,
+      // Transparent, theme-aware status bar (follows the app theme, not the OS).
+      systemOverlayStyle:
+          appBarOverlayStyle(Theme.of(context).brightness == Brightness.dark),
       titleSpacing: Spacing.lg,
       toolbarHeight: 64,
       title: Row(

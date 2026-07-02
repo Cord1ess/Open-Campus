@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/api_client.dart';
 import 'auth/credential_store.dart';
+import 'auth/session_state.dart';
 import 'auth/token_storage.dart';
 import 'cache/local_cache.dart';
 
@@ -16,5 +17,11 @@ final localCacheProvider = Provider((_) => LocalCache());
 final tokenProvider = StateProvider<String?>((_) => null);
 
 final apiClientProvider = Provider((ref) {
-  return ApiClient(tokenProvider: () => ref.read(tokenProvider));
+  return ApiClient(
+    tokenProvider: () => ref.read(tokenProvider),
+    // Any 409 (UCAM session died upstream) flips the global session state so the
+    // whole app shows the blocking re-login overlay at once.
+    onSessionExpired: () =>
+        ref.read(sessionProvider.notifier).markExpired(),
+  );
 });

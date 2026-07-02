@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
+
 /// A sliver app bar with the Android Material 3 "large top app bar" behaviour:
 /// a SINGLE title that smoothly scales and slides from its large expanded
 /// position to the small collapsed position next to the leading (back) button
@@ -30,6 +32,7 @@ class SliverCollapsingAppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final canPop = showBack ?? Navigator.of(context).canPop();
 
     return SliverAppBar(
@@ -37,6 +40,10 @@ class SliverCollapsingAppBar extends StatelessWidget {
       backgroundColor: scheme.surface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
+      // Transparent status bar with icons that follow the APP theme (not the OS
+      // dark-mode setting), so the bar area shows the app's own surface behind it
+      // and never a mismatched native background.
+      systemOverlayStyle: appBarOverlayStyle(isDark),
       // Subtle hairline once content scrolls under, no color wash.
       scrolledUnderElevation: 0,
       automaticallyImplyLeading: canPop,

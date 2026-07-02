@@ -66,15 +66,6 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
   }
 }
 
-/// Extracts the leading numeric term code (e.g. "[261] Spring 2026" → 261) so
-/// trimesters sort newest-first. Non-coded groups (e.g. "Payments") sort last.
-int _termCode(String t) {
-  final m = RegExp(r'\d+').firstMatch(t);
-  // tryParse guards against an over-long / overflowing digit run crashing the
-  // sort (see bill_model.currentTrimester). -1 sorts non-coded groups last.
-  return m != null ? (int.tryParse(m.group(0)!) ?? -1) : -1;
-}
-
 class _Content extends StatelessWidget {
   final BillData d;
   const _Content(this.d);
@@ -89,10 +80,12 @@ class _Content extends StatelessWidget {
             icon: Icons.history, title: 'No transactions yet'),
       );
     }
-    final groups = d.byTrimester;
-    // Newest trimester first by term code.
-    final keys = groups.keys.toList()
-      ..sort((a, b) => _termCode(b).compareTo(_termCode(a)));
+    // A per-trimester statement: newest term first, and within each term a
+    // single date-descending stream of bills AND payments interleaved (matching
+    // UCAM's own layout). Payments — which carry no term — are assigned to the
+    // trimester they chronologically follow. See BillData.statementByTrimester.
+    final groups = d.statementByTrimester;
+    final keys = groups.keys.toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -110,21 +103,31 @@ class _Content extends StatelessWidget {
   }
 }
 
-/// One trimester's statement: payments (top) then billed charges (below), each
-/// with its own subtotal. Accent-coloured.
+/// One trimester's statement: a single date-descending stream of transactions
+/// (bills and payments interleaved, newest first), exactly as UCAM lists them.
+/// Payments are green (+), charges are neutral. Header shows the term's net.
 class _TrimesterStatement extends StatelessWidget {
   final String trimester;
-  final List<BillItem> items;
+  final List<BillItem> items; // already date-descending (newest first)
   const _TrimesterStatement({required this.trimester, required this.items});
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final payments = items.where((i) => i.isPayment).toList();
-    final bills = items.where((i) => !i.isPayment).toList();
-    final totalPaid = payments.fold<double>(0, (s, i) => s + (i.payment ?? 0));
-    final totalBilled = bills.fold<double>(0, (s, i) => s + (i.amount ?? 0));
-    final net = totalBilled - totalPaid;
+    // Sum by kind so adjustments (waivers) aren't miscounted as charges.
+    var totalBilled = 0.0, totalPaid = 0.0, totalWaived = 0.0;
+    for (final i in items) {
+      switch (i.kind) {
+        case BillKind.charge:
+          totalBilled += i.amount ?? 0;
+        case BillKind.payment:
+          totalPaid += (i.payment ?? 0).abs();
+        case BillKind.adjustment:
+          totalWaived += (i.discount ?? 0).abs();
+      }
+    }
+    // Net still owed this term: charges minus waivers minus payments.
+    final net = totalBilled - totalWaived - totalPaid;
 
     return Container(
       decoration: BoxDecoration(
@@ -176,51 +179,38 @@ class _TrimesterStatement extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Payments first (most recent on top).
-                if (payments.isNotEmpty) ...[
-                  _SectionHeader(
-                    label: 'Payments',
-                    icon: Icons.south_west_rounded,
-                    total: '+${bdt(totalPaid)}',
-                    color: scheme.secondary,
-                  ),
-                  const SizedBox(height: Spacing.sm),
-                  for (final p in payments)
-                    _Line(
-                      title: p.feeType ?? p.remark ?? 'Payment',
-                      sub: p.date,
-                      amount: '+${bdt(p.payment)}',
-                      amountColor: scheme.secondary,
-                      icon: Icons.south_west_rounded,
+                // One date-descending stream — bills and payments interleaved,
+                // exactly as UCAM shows the term's activity.
+                for (final it in items)
+                  _TxnLine(item: it),
+                const SizedBox(height: Spacing.md),
+                Divider(height: 1, color: scheme.outlineVariant),
+                const SizedBox(height: Spacing.md),
+                // Compact billed / waived / paid subtotal for the term. Waived
+                // only appears when the term actually has a waiver.
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Subtotal(
+                          label: 'Billed',
+                          value: bdt(totalBilled),
+                          color: scheme.primary),
                     ),
-                ],
-                if (payments.isNotEmpty && bills.isNotEmpty) ...[
-                  const SizedBox(height: Spacing.md),
-                  Divider(height: 1, color: scheme.outlineVariant),
-                  const SizedBox(height: Spacing.md),
-                ],
-                // Billed charges below.
-                if (bills.isNotEmpty) ...[
-                  _SectionHeader(
-                    label: 'Billed',
-                    icon: Icons.north_east_rounded,
-                    total: bdt(totalBilled),
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(height: Spacing.sm),
-                  for (final b in bills)
-                    _Line(
-                      title: b.courseCode ?? b.feeType ?? 'Charge',
-                      sub: [
-                        if (b.courseCode != null) b.feeType,
-                        if (b.discount != null && b.discount! > 0)
-                          'waiver ${bdt(b.discount)}',
-                      ].whereType<String>().join(' · '),
-                      amount: bdt(b.amount),
-                      amountColor: scheme.onSurface,
-                      icon: Icons.north_east_rounded,
+                    if (totalWaived > 0)
+                      Expanded(
+                        child: _Subtotal(
+                            label: 'Waived',
+                            value: '-${bdt(totalWaived)}',
+                            color: scheme.tertiary),
+                      ),
+                    Expanded(
+                      child: _Subtotal(
+                          label: 'Paid',
+                          value: '+${bdt(totalPaid)}',
+                          color: scheme.secondary),
                     ),
-                ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -230,60 +220,72 @@ class _TrimesterStatement extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String total;
-  final Color color;
-  const _SectionHeader({
-    required this.label,
-    required this.icon,
-    required this.total,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 15, color: color),
-        const SizedBox(width: 6),
-        Text(label.toUpperCase(),
-            style: context.text.labelSmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5)),
-        const Spacer(),
-        Text(total,
-            style: context.text.titleSmall
-                ?.copyWith(color: color, fontWeight: FontWeight.w800)),
-      ],
-    );
-  }
-}
-
-class _Line extends StatelessWidget {
-  final String title;
-  final String? sub;
-  final String amount;
-  final Color amountColor;
-  final IconData icon;
-  const _Line({
-    required this.title,
-    required this.sub,
-    required this.amount,
-    required this.amountColor,
-    required this.icon,
-  });
+/// A single statement row: a bill (charge) or a payment. Payments are shown in
+/// the secondary accent with a leading "+"; charges are neutral. A small
+/// leading icon + the date make the interleaved stream easy to scan.
+class _TxnLine extends StatelessWidget {
+  final BillItem item;
+  const _TxnLine({required this.item});
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final kind = item.kind;
+
+    // Per-kind icon, accent, title, and amount string. Adjustments (waivers /
+    // discounts) get their own treatment so they never render as a blank charge.
+    final (IconData icon, Color accent, String title, String amount) =
+        switch (kind) {
+      BillKind.payment => (
+        Icons.south_west_rounded,
+        scheme.secondary,
+        item.feeType ?? 'Payment',
+        '+${bdt((item.payment ?? 0).abs())}',
+      ),
+      BillKind.adjustment => (
+        Icons.percent_rounded,
+        scheme.tertiary,
+        item.feeType ?? item.courseCode ?? 'Waiver',
+        // Discounts reduce what's owed; show as a negative reduction.
+        '-${bdt((item.discount ?? 0).abs())}',
+      ),
+      BillKind.charge => (
+        Icons.north_east_rounded,
+        scheme.onSurface,
+        item.courseCode ?? item.feeType ?? 'Charge',
+        // Guard a charge with no amount (rare) so it reads "—", not a bare unit.
+        (item.amount ?? 0) != 0 ? bdt(item.amount) : '—',
+      ),
+    };
+
+    // Sub-line: date, plus context per kind.
+    final subParts = <String>[
+      if (item.date != null && item.date!.trim().isNotEmpty) item.date!.trim(),
+      // For a charge titled by course code, also show the fee type.
+      if (kind == BillKind.charge &&
+          item.courseCode != null &&
+          item.feeType != null &&
+          item.feeType != item.courseCode)
+        item.feeType!,
+      // The remark carries useful context on payments AND adjustments.
+      if (item.remark != null && item.remark!.trim().isNotEmpty)
+        item.remark!.trim(),
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon,
+                size: 15,
+                color: kind == BillKind.charge
+                    ? scheme.onSurfaceVariant
+                    : accent),
+          ),
+          const SizedBox(width: Spacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,19 +293,46 @@ class _Line extends StatelessWidget {
                 Text(title,
                     style: context.text.bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w600)),
-                if (sub != null && sub!.isNotEmpty)
-                  Text(sub!,
-                      style: context.text.labelSmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                if (subParts.isNotEmpty)
+                  Text(
+                    subParts.join(' · '),
+                    style: context.text.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
               ],
             ),
           ),
           const SizedBox(width: Spacing.sm),
           Text(amount,
               style: context.text.bodyMedium
-                  ?.copyWith(color: amountColor, fontWeight: FontWeight.w700)),
+                  ?.copyWith(color: accent, fontWeight: FontWeight.w700)),
         ],
       ),
+    );
+  }
+}
+
+/// A compact "label / value" subtotal used in the term footer.
+class _Subtotal extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _Subtotal(
+      {required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(),
+            style: context.text.labelSmall?.copyWith(
+                color: color, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+        const SizedBox(height: 2),
+        Text(value,
+            style: context.text.titleSmall
+                ?.copyWith(color: color, fontWeight: FontWeight.w800)),
+      ],
     );
   }
 }

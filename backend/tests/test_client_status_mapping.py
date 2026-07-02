@@ -18,11 +18,14 @@ from app.ucam.client import (
 
 
 class _FakeResponse:
-    def __init__(self, status_code, *, headers=None, text="", json_body=None):
+    def __init__(self, status_code, *, headers=None, text="", json_body=None,
+                 url="https://ucam.uiu.ac.bd/Security/StudentHome.aspx/GetX"):
         self.status_code = status_code
         self.headers = headers or {}
         self.text = text
         self._json = json_body
+        # A data URL by default (NOT the login page) so status/body decide expiry.
+        self.url = url
 
     def json(self):
         return self._json
@@ -91,8 +94,22 @@ async def test_500_is_ucam_error_not_expired():
 
 
 @pytest.mark.asyncio
-async def test_non_json_200_is_session_expired():
-    # 200 but not JSON and not obviously the login page → treated as expired.
+async def test_non_json_200_is_TRANSIENT_not_expiry():
+    # 200 but not JSON and NOT the login page → transient blip, NOT expiry.
+    # (Calling this "expired" caused false re-login prompts during active use.)
     resp = _FakeResponse(200, headers={"content-type": "text/plain"}, text="x")
+    with pytest.raises(UcamError) as ei:
+        await call_page_method(_FakeSession(resp), "GetX")
+    assert not isinstance(ei.value, UcamSessionExpired)
+
+
+@pytest.mark.asyncio
+async def test_non_json_200_login_page_IS_expiry():
+    # 200, non-JSON, but the body IS the login form → genuine expiry.
+    resp = _FakeResponse(
+        200,
+        headers={"content-type": "text/html"},
+        text='<form name="frmLogIn">...</form>',
+    )
     with pytest.raises(UcamSessionExpired):
         await call_page_method(_FakeSession(resp), "GetX")

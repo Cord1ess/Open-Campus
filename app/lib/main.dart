@@ -6,8 +6,10 @@ import 'core/debug/fps_overlay.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/providers.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/browser_theme_color.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/auth/auth_controller.dart';
+import 'features/auth/session_expired_overlay.dart';
 import 'features/bootstrap/bootstrap_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/common/splash_screen.dart';
@@ -51,21 +53,20 @@ class OpenCampusApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeControllerProvider);
     final isDark = theme.materialMode == ThemeMode.dark;
-    // Transparent system bars whose icons match the theme, so the Android
-    // status & navigation bars blend into the app background as one continuous
-    // surface (no separate brand-colored bar).
-    final overlay = SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      // Kill the translucent scrim Android otherwise paints behind the nav bar
-      // (that grey/black wash is what makes the bar look like a separate strip).
-      systemNavigationBarContrastEnforced: false,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarIconBrightness:
-          isDark ? Brightness.light : Brightness.dark,
-    );
+    // Transparent, theme-aware system bars (icons follow the APP theme, not the
+    // OS setting) so the status & navigation bars blend into the app background
+    // as one continuous surface. Shared helper — same style used by every app
+    // bar, so the bars behave identically everywhere.
+    final overlay = appBarOverlayStyle(isDark);
+
+    // Keep the browser/PWA status bar (theme-color meta) matching the app
+    // surface, so an installed webapp's bar follows dark/black mode too — the
+    // web counterpart of the native status-bar theming. No-op off the web.
+    // Read the surface from the resolved ThemeData so light/dark/black all use
+    // their real color from one source of truth.
+    final surface = (isDark ? theme.dark : theme.light).colorScheme.surface;
+    setBrowserThemeColor(surface);
+
     return MaterialApp(
       title: 'Open Campus',
       debugShowCheckedModeBanner: false,
@@ -87,6 +88,15 @@ class OpenCampusApp extends ConsumerWidget {
           minScaleFactor: 1.0,
           maxScaleFactor: 1.15,
           child: child!,
+        );
+        // Global session-expired overlay: sits above EVERY screen (via a Stack in
+        // the app builder, so it survives navigation) and blocks interaction with
+        // stale data the moment any request returns 409.
+        app = Stack(
+          children: [
+            app,
+            const SessionExpiredOverlay(),
+          ],
         );
         // Diagnostic FPS readout — only present with --dart-define=OC_FPS=true.
         if (FpsOverlay.enabled) app = FpsOverlay(child: app);

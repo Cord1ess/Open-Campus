@@ -132,17 +132,21 @@ async def get_course_history(session: CurrentSession) -> CourseHistoryResponse:
 
 @router.get("/bill", response_model=BillResponse, response_model_by_alias=False)
 async def get_bill(session: CurrentSession) -> BillResponse:
-    """Itemized bill, parsed from StudentGeneralBillV2.aspx. The authoritative
-    current balance comes from the home page (the bill grid's running sums don't
-    reconcile to the live balance), so we fill it from there."""
+    """Itemized bill + authoritative totals, parsed from StudentGeneralBillV2.aspx.
+
+    The bill page now yields UCAM's own computed balance (txtBalance) and totals,
+    so we use those directly. We still fall back to the home page's
+    FI_CurrentBalance if the bill page didn't carry a balance, and only fetch the
+    home page in that case (one fewer request in the common path)."""
     try:
         bill_html = await bill_ep.fetch_bill_html(session)
-        home_html = await home_ep.fetch_home_html(session)
+        bill = bill_ep.parse_bill(bill_html)
+        if bill.balance is None:
+            home_html = await home_ep.fetch_home_html(session)
+            home = home_ep.parse_home(home_html, fallback_roll=session.roll)
+            bill.balance = home.current_balance
     except (UcamSessionExpired, UcamError, httpx.HTTPError) as exc:
         raise _handle_failure(exc)
-    bill = bill_ep.parse_bill(bill_html)
-    home = home_ep.parse_home(home_html, fallback_roll=session.roll)
-    bill.balance = home.current_balance
     return bill
 
 
