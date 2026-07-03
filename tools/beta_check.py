@@ -20,9 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # Directories we never scan into (deps, build artifacts, virtualenvs, vcs).
+# `captures` is included because it's already caught wholesale by FORBIDDEN_PATHS
+# (a raw capture is never shippable); string-scanning inside it too just produces
+# redundant noise — and its raw bodies legitimately contain faculty names that
+# collide with the advisor-name needle below.
 SKIP_DIRS = {
     ".git", ".venv", "venv", "node_modules", ".dart_tool", "build",
-    ".pytest_cache", "__pycache__", ".idea", ".vscode",
+    ".pytest_cache", "__pycache__", ".idea", ".vscode", "captures",
 }
 
 # Paths that must NOT exist in a distributable tree (no legitimate reason).
@@ -38,12 +42,20 @@ WARN_PATHS = [
     "backend/.env",
 ]
 
-# Real personal identifiers that must never appear anywhere in source/docs.
-# (Add any others you discover.)
-FORBIDDEN_STRINGS = [
-    "0112330671",          # real student roll
-    "ibnemasud",           # real advisor email handle
-    "Abdullah Ibne Masud", # real advisor name
+# Unambiguous personal identifiers — unique enough that any substring hit is a
+# real leak. Matched literally, anywhere.
+FORBIDDEN_IDENTIFIERS = [
+    "0112330671",   # real student roll
+    "ibnemasud",    # real advisor email handle
+]
+
+# Personal NAMES that must not ship as the user's own data — but which can also
+# legitimately occur as a faculty member's name in the shared course catalog
+# (e.g. "Abdullah Ibne Masud Mahi" is a real, public CSE faculty). To avoid
+# false positives, a name matches only as a STANDALONE full name (word-boundary
+# on both sides), so it does NOT fire when it's a prefix of a longer name.
+FORBIDDEN_NAMES = [
+    "Abdullah Ibne Masud",  # real advisor name (the user's own)
 ]
 
 # Source extensions worth scanning for forbidden strings.
@@ -95,10 +107,17 @@ def main() -> int:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for needle in FORBIDDEN_STRINGS:
+        for needle in FORBIDDEN_IDENTIFIERS:
             if needle in text:
                 problems.append(
                     f"Personal data '{needle}' found in {path.relative_to(ROOT)}"
+                )
+        for name in FORBIDDEN_NAMES:
+            # Standalone full name only: word-boundary both sides, so a longer
+            # faculty name that merely starts with it (…Mahi) does not match.
+            if re.search(rf"\b{re.escape(name)}\b(?!\s+\S)", text):
+                problems.append(
+                    f"Personal data '{name}' found in {path.relative_to(ROOT)}"
                 )
 
     # 4. Debug posture in a shipped .env.example (should be false).

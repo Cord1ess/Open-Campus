@@ -10,6 +10,15 @@
 # Raw captures (personal academic data / recon).
 backend/captures/
 docs/captures/
+# Console (ucamcloud) capture/build tooling: kept LOCAL only. These are the
+# maintainer's offline tools for refreshing the section catalog once per
+# trimester. They are never used by the shipped app or backend, and — since the
+# console enabled bot detection — we don't publish scripts that map/capture its
+# API. The generated catalog (backend/data/section_catalog.json) IS committed;
+# only the tooling that produces it stays off the public repo.
+tools/console_capture.py
+tools/build_catalog.py
+tools/SECTION_CATALOG.md
 
 # --- Internal docs (not part of the shipped app) ---
 # Working notes, audits, and captures. Internal only.

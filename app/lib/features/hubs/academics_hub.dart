@@ -17,6 +17,7 @@ import '../dashboard/dashboard_widgets.dart';
 import '../dashboard/home_model.dart';
 import '../dashboard/models.dart';
 import '../dashboard/results_page.dart';
+import '../sections/your_sections_page.dart';
 import 'hub_page.dart';
 
 class AcademicsHub extends ConsumerWidget {
@@ -134,10 +135,13 @@ class AcademicsHub extends ConsumerWidget {
             onTap: (c) =>
                 Navigator.of(c).push(sharedAxisRoute(const AdvisingPage())),
           ),
-          const HubFeature(
-            icon: Icons.app_registration_outlined,
-            title: 'Self Registration',
-            subtitle: 'Register for courses',
+          HubFeature(
+            icon: Icons.event_seat_outlined,
+            title: 'Section Selection',
+            subtitle: 'Your sections · faculty · simulator',
+            status: FeatureStatus.live,
+            onTap: (c) =>
+                Navigator.of(c).push(sharedAxisRoute(const YourSectionsPage())),
           ),
           const HubFeature(
             icon: Icons.swap_horiz_outlined,

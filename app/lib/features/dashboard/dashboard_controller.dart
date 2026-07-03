@@ -10,6 +10,7 @@ import '../academics/exam_routine_model.dart';
 import '../academics/marks_model.dart';
 import '../academics/uiu_notices_model.dart';
 import '../finance/bill_model.dart';
+import '../sections/section_catalog_model.dart';
 import 'home_model.dart';
 import 'models.dart';
 import 'notices_model.dart';
@@ -262,6 +263,23 @@ final advisingProvider = StateNotifierProvider<ResourceController<AdvisingData>,
     path: '/student/advising',
     parse: AdvisingData.fromJson,
     toJson: (d) => d.toJson(),
+  );
+});
+
+/// Shared section catalog (GET /catalog/sections). Public, not per-student, and
+/// changes only when the maintainer rebuilds it (once per trimester), so it's
+/// cached on-device for a long window — reopening the sections feature serves
+/// the cache instantly and skips re-downloading ~0.5 MB every time.
+final sectionCatalogProvider = StateNotifierProvider<
+    ResourceController<SectionCatalogData>,
+    ResourceState<SectionCatalogData>>((ref) {
+  return ResourceController<SectionCatalogData>(
+    ref,
+    resource: 'section_catalog',
+    path: '/catalog/sections',
+    parse: SectionCatalogData.fromJson,
+    toJson: (d) => d.toJson(),
+    freshFor: const Duration(hours: 12),
   );
 });
 
