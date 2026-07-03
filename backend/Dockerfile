@@ -11,6 +11,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+# The shared section catalog (committed static data). catalog.py resolves it at
+# <backend>/data/section_catalog.json, which in the image is /app/data/...
+# Without this, /catalog/sections serves an empty catalog and the app's Section
+# Selection page shows nothing.
+COPY data ./data
 
 EXPOSE 8000
 
