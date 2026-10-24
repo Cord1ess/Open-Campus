@@ -5,119 +5,66 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
-import '../dashboard/resource_view.dart';
-import '../common/collapsing_title.dart';
 import 'exam_routine_model.dart';
 
-/// Exam routines are published by UIU as Google Sheets, one per program. We list
-/// them and open the chosen one in the browser. Data from /student/exam-routine.
+/// Exam routines are published by UIU as Google Sheets, one per program. We
+/// list them and open the chosen one in the browser. Data from
+/// /student/exam-routine.
 class ExamRoutinePage extends ConsumerWidget {
   const ExamRoutinePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(examRoutineProvider);
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverCollapsingAppBar(title: 'Exam Routine'),
-          SliverPadding(
-            padding: const EdgeInsets.all(Spacing.lg),
-            sliver: SliverList.list(children: [
-              FadeSlideIn(
-                child: Text(
-                  'UIU publishes exam routines per program. Open the one that '
-                  'matches your program.',
-                  style: context.text.bodyMedium
-                      ?.copyWith(color: context.scheme.onSurfaceVariant),
-                ),
-              ),
-              const SizedBox(height: Spacing.lg),
-              state.when(
-                loading: () => const CardSkeleton(lines: 4),
-                error: (e, _) => StateMessage(
-                  icon: Icons.cloud_off,
-                  title: 'Couldn\'t load',
-                  subtitle: '$e',
-                  actionLabel: 'Retry',
-                  onAction: () => ref.invalidate(examRoutineProvider),
-                ),
-                data: (d) => d.routines.isEmpty
-                    ? const StateMessage(
-                        icon: Icons.event_busy_outlined,
-                        title: 'No exam routine published',
-                      )
-                    : Column(
-                        children: [
-                          for (var i = 0; i < d.routines.length; i++) ...[
-                            if (i > 0) const SizedBox(height: Spacing.md),
-                            FadeSlideIn(
-                              delayMs: 40 * i,
-                              child: _RoutineTile(d.routines[i]),
-                            ),
-                          ],
-                        ],
-                      ),
-              ),
-              const SizedBox(height: 96),
-            ]),
+    return PageScaffold(
+      title: 'Exam Routine',
+      body: Stacked(
+        gap: Spacing.lg,
+        children: [
+          Text(
+            'UIU publishes exam routines per program. Open the one that '
+            'matches your program.',
+            style: context.text.bodyMedium
+                ?.copyWith(color: context.scheme.onSurfaceVariant),
+          ),
+          state.when(
+            loading: () => const LoadingState(label: 'Loading exam routines…'),
+            error: (e, _) => ErrorState(
+              title: 'Couldn’t load exam routines',
+              message: '$e',
+              onRetry: () => ref.invalidate(examRoutineProvider),
+            ),
+            data: (d) => d.routines.isEmpty
+                ? const EmptyState(
+                    icon: AppIcons.exams,
+                    title: 'No exam routine published',
+                    message: 'Check back once UIU publishes this term’s routine.',
+                  )
+                : RowGroup(
+                    children: [
+                      for (final r in d.routines)
+                        ListRow(
+                          icon: AppIcons.exams,
+                          title: r.label,
+                          external: true,
+                          onTap: () => _open(context, r),
+                        ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
-}
 
-class _RoutineTile extends StatelessWidget {
-  final ExamRoutineLink routine;
-  const _RoutineTile(this.routine);
-
-  Future<void> _open(BuildContext context) async {
+  Future<void> _open(BuildContext context, ExamRoutineLink routine) async {
     final uri = Uri.tryParse(routine.url);
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t open the routine.')),
+        const SnackBar(content: Text('Couldn’t open the routine.')),
       );
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SpringTap(
-      onTap: () => _open(context),
-      borderRadius: BorderRadius.circular(Radii.lg),
-      child: Container(
-        padding: const EdgeInsets.all(Spacing.lg),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(Radii.lg),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer,
-                borderRadius: BorderRadius.circular(Radii.md),
-              ),
-              child: Icon(Icons.calendar_month_outlined,
-                  color: scheme.onPrimaryContainer),
-            ),
-            const SizedBox(width: Spacing.md),
-            Expanded(
-              child: Text(routine.label,
-                  style: context.text.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(width: Spacing.sm),
-            Icon(Icons.open_in_new, size: 18, color: scheme.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
   }
 }

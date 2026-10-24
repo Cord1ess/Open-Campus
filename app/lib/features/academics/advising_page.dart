@@ -6,11 +6,10 @@ import '../../shared/widgets.dart';
 import '../common/coming_soon_page.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
-import '../common/collapsing_title.dart';
 import 'advising_model.dart';
 
 /// Pre-advising: the courses offered for next-term registration, with the ones
-/// you've ALREADY taken marked inline. Pre-advising itself happens on UCAM (we
+/// you've already taken marked inline. Pre-advising itself happens on UCAM (we
 /// don't do it in-app), so there's a direct link out.
 class AdvisingPage extends ConsumerStatefulWidget {
   const AdvisingPage({super.key});
@@ -31,35 +30,15 @@ class _AdvisingPageState extends ConsumerState<AdvisingPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(advisingProvider);
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(advisingProvider.notifier).load(force: true),
-        child: CustomScrollView(
-          slivers: [
-            const SliverCollapsingAppBar(title: 'Pre-Advising'),
-            SliverPadding(
-              padding: const EdgeInsets.all(Spacing.lg),
-              sliver: SliverList.list(children: [
-                switch (state) {
-                  ResLoading() => const SectionCard(
-                      title: 'Pre-Advising',
-                      icon: Icons.assignment_outlined,
-                      child: CardSkeleton(label: 'Loading offered courses…')),
-                  ResError(:final message) => StateMessage(
-                      icon: Icons.cloud_off,
-                      title: 'Couldn’t load',
-                      subtitle: message,
-                      actionLabel: 'Try again',
-                      onAction: () =>
-                          ref.read(advisingProvider.notifier).load(force: true),
-                    ),
-                  ResData(:final loaded) => _Content(loaded.data),
-                },
-                const SizedBox(height: 96),
-              ]),
-            ),
-          ],
-        ),
+    return PageScaffold(
+      title: 'Pre-Advising',
+      onRefresh: () => ref.read(advisingProvider.notifier).load(force: true),
+      body: ResourceBody<AdvisingData>(
+        state: state,
+        loadingLabel: 'Loading offered courses…',
+        errorTitle: 'Couldn’t load pre-advising',
+        onRetry: () => ref.read(advisingProvider.notifier).load(force: true),
+        builder: (d) => _Content(d),
       ),
     );
   }
@@ -71,15 +50,27 @@ class _Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final note = InfoNote(
+      title: 'Pre-advise on UCAM',
+      icon: AppIcons.advising,
+      text: 'Use this list to plan, then submit your pre-advising on the UCAM '
+          'portal — it isn’t done inside the app.',
+      action: OutlinedButton.icon(
+        onPressed: () => openUcam(context),
+        icon: const Icon(AppIcons.external, size: 18),
+        label: const Text('Open UCAM'),
+      ),
+    );
+
     if (d.offered.isEmpty && d.taken.isEmpty) {
-      return Column(
+      return Stacked(
+        gap: Spacing.lg,
         children: [
-          const StateMessage(
-              icon: Icons.assignment_outlined,
+          const EmptyState(
+              icon: AppIcons.advising,
               title: 'Nothing to advise',
-              subtitle: 'No advising data is available right now.'),
-          const SizedBox(height: Spacing.lg),
-          _UcamCard(),
+              message: 'No advising data is available right now.'),
+          note,
         ],
       );
     }
@@ -90,104 +81,40 @@ class _Content extends StatelessWidget {
         if (c.code != null) _norm(c.code!),
     };
     final offered = d.offered;
-    final takenInOffered =
-        offered.where((c) => c.code != null && takenCodes.contains(_norm(c.code!))).length;
+    final takenInOffered = offered
+        .where((c) => c.code != null && takenCodes.contains(_norm(c.code!)))
+        .length;
     final remaining = offered.length - takenInOffered;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        FadeSlideIn(child: _UcamCard()),
-        const SizedBox(height: Spacing.lg),
-        if (offered.isNotEmpty)
-          FadeSlideIn(
-            delayMs: 60,
-            child: SectionCard(
-              title: 'Available next term',
-              icon: Icons.playlist_add_check_outlined,
-              trailing: Text(
-                  '$remaining new · ${offered.length} total',
-                  style: context.text.labelMedium
-                      ?.copyWith(color: context.scheme.onSurfaceVariant)),
-              child: Column(
-                children: [
-                  for (var i = 0; i < offered.length; i++) ...[
-                    if (i > 0)
-                      Divider(
-                          height: Spacing.lg,
-                          color: context.scheme.outlineVariant),
-                    _CourseRow(
-                      offered[i],
-                      taken: offered[i].code != null &&
-                          takenCodes.contains(_norm(offered[i].code!)),
-                    ),
-                  ],
-                ],
-              ),
+    final available = offered.isEmpty
+        ? null
+        : Section(
+            title: 'Available next term',
+            trailing: Text('$remaining new · ${offered.length} total'),
+            child: RowGroup(
+              children: [
+                for (final c in offered)
+                  _CourseRow(
+                    c,
+                    taken: c.code != null && takenCodes.contains(_norm(c.code!)),
+                  ),
+              ],
             ),
-          ),
-        // Any taken courses that AREN'T in the offered list (already-cleared
-        // requirements) — shown compactly so the data isn't lost.
-        if (d.taken.isNotEmpty) ...[
-          const SizedBox(height: Spacing.lg),
-          FadeSlideIn(
-            delayMs: 120,
-            child: _TakenSummary(d.taken),
-          ),
-        ],
-      ],
-    );
+          );
+    final taken = d.taken.isNotEmpty ? _TakenSummary(d.taken) : null;
+
+    Widget body;
+    if (available != null && taken != null) {
+      body = TwoColumn(left: available, right: taken, ratio: 0.6);
+    } else {
+      body = available ?? taken ?? const SizedBox.shrink();
+    }
+
+    return Stacked(children: [note, body]);
   }
 
   static String _norm(String code) =>
       code.toUpperCase().replaceAll(RegExp(r'\s+'), '');
-}
-
-/// Prominent card linking out to UCAM, since pre-advising is done there.
-class _UcamCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Container(
-      padding: const EdgeInsets.all(Spacing.lg),
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.open_in_new_rounded, size: 18, color: scheme.primary),
-              const SizedBox(width: Spacing.sm),
-              Expanded(
-                child: Text('Pre-advise on UCAM',
-                    style: context.text.titleSmall?.copyWith(
-                        color: scheme.primary, fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
-          const SizedBox(height: Spacing.sm),
-          Text(
-              'Use this list to plan, then submit your pre-advising on the UCAM '
-              'portal — it isn’t done inside the app.',
-              style: context.text.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant, height: 1.4)),
-          const SizedBox(height: Spacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => openUcam(context),
-              icon: const Icon(Icons.account_balance_rounded, size: 18),
-              label: const Text('Open UCAM'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _CourseRow extends StatelessWidget {
@@ -197,80 +124,24 @@ class _CourseRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Opacity(
-      opacity: taken ? 0.6 : 1,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(c.code ?? '—',
-                          style: context.text.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              decoration:
-                                  taken ? TextDecoration.lineThrough : null)),
-                    ),
-                    if (taken) ...[
-                      const SizedBox(width: Spacing.sm),
-                      _tag(context, 'Taken', scheme.secondary,
-                          icon: Icons.check_rounded),
-                    ] else if (c.mandatory) ...[
-                      const SizedBox(width: Spacing.sm),
-                      _tag(context, 'Required', scheme.primary),
-                    ],
-                  ],
-                ),
-                if (c.title != null)
-                  Text(c.title!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.text.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          const SizedBox(width: Spacing.sm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('${c.credit?.toStringAsFixed(0) ?? '—'} cr',
-                  style: context.text.labelMedium
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-              if (c.offeredTrimester != null)
-                Text(c.offeredTrimester!,
-                    style: context.text.labelSmall
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tag(BuildContext context, String label, Color color, {IconData? icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 12, color: color),
-            const SizedBox(width: 2),
-          ],
-          Text(label,
-              style: context.text.labelSmall
-                  ?.copyWith(color: color, fontWeight: FontWeight.w800)),
-        ],
-      ),
+    final subtitle = [
+      if (c.title != null && c.title!.isNotEmpty) c.title!,
+      if (c.offeredTrimester != null && c.offeredTrimester!.isNotEmpty)
+        c.offeredTrimester!,
+    ].join(' · ');
+    final badge = taken
+        ? const StatusBadge('Taken',
+            tone: StatusTone.success, icon: AppIcons.check)
+        : (c.mandatory
+            ? const StatusBadge('Required', tone: StatusTone.accent)
+            : null);
+    return ListRow(
+      title: c.code ?? '—',
+      subtitle: subtitle.isEmpty ? null : subtitle,
+      muted: taken,
+      chevron: false,
+      value: '${c.credit?.toStringAsFixed(0) ?? '—'} cr',
+      trailing: badge,
     );
   }
 }
@@ -283,31 +154,15 @@ class _TakenSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
     final credits = taken.fold<double>(0, (s, c) => s + (c.credit ?? 0));
-    return SectionCard(
+    return Section(
       title: 'Already taken',
-      icon: Icons.history_outlined,
-      trailing: Text('${taken.length} · ${credits.toStringAsFixed(0)} cr',
-          style: context.text.labelMedium
-              ?.copyWith(color: scheme.onSurfaceVariant)),
+      trailing: Text('${taken.length} · ${credits.toStringAsFixed(0)} cr'),
       child: Wrap(
         spacing: Spacing.sm,
         runSpacing: Spacing.sm,
         children: [
-          for (final c in taken)
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(c.code ?? '—',
-                  style: context.text.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700)),
-            ),
+          for (final c in taken) StatusBadge(c.code ?? '—'),
         ],
       ),
     );
