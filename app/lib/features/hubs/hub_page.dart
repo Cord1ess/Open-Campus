@@ -1,94 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../shared/responsive.dart';
 import '../../shared/widgets.dart';
-import '../common/collapsing_title.dart';
 import '../common/coming_soon_page.dart';
+import '../profile/profile_button.dart';
 
-/// Collapsing-title page of grouped feature rows, used by Academics, Finance,
-/// and Services. On wide screens the rows flow into a responsive grid; each row
-/// navigates with a shared-axis transition.
-class HubPage extends StatelessWidget {
-  final String title;
-  final List<HubGroup> groups;
-
-  /// Optional summary widget shown at the top of the page (e.g. stat cards) so
-  /// the header area isn't empty.
-  final Widget? header;
-  const HubPage({
-    super.key,
-    required this.title,
-    required this.groups,
-    this.header,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Wide screens: feature rows within a group flow 2-up so groups read as
-    // compact cards instead of one tall column.
-    final groupCols = Breakpoints.isWide(context) ? 2 : 1;
-    return Scaffold(
-      body: CollapsingTitleScrollView(
-        title: title,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-                Spacing.lg, Spacing.sm, Spacing.lg, 0),
-            sliver: SliverList.list(children: [
-              if (header != null) ...[
-                SpringIn(child: header!),
-                const SizedBox(height: Spacing.xl),
-              ],
-              for (var g = 0; g < groups.length; g++) ...[
-                if (g > 0) const SizedBox(height: Spacing.xl),
-                SpringIn(
-                  delayMs: 40 * g,
-                  child: FeatureGroup(
-                    label: groups[g].label,
-                    rows: [
-                      ResponsiveGrid(
-                        columns: groupCols,
-                        children: [
-                          for (final f in groups[g].features) _row(context, f),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 96),
-            ]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(BuildContext context, HubFeature f) {
-    return FeatureRow(
-      icon: f.icon,
-      title: f.title,
-      subtitle: f.subtitle,
-      status: f.status,
-      onTap: () {
-        if (f.onTap != null) {
-          f.onTap!(context);
-        } else {
-          Navigator.of(context).push(sharedAxisRoute(
-            ComingSoonPage(title: f.title, icon: f.icon),
-          ));
-        }
-      },
-    );
-  }
-}
-
-class HubGroup {
-  final String label;
-  final List<HubFeature> features;
-  const HubGroup(this.label, this.features);
-}
+/// Availability of a hub feature.
+enum FeatureStatus { live, comingSoon, opensInUcam }
 
 class HubFeature {
   final IconData icon;
@@ -100,7 +18,97 @@ class HubFeature {
     required this.icon,
     required this.title,
     this.subtitle,
-    this.status = FeatureStatus.comingSoon,
+    this.status = FeatureStatus.live,
     this.onTap,
   });
+}
+
+class HubGroup {
+  final String label;
+  final List<HubFeature> features;
+  const HubGroup(this.label, this.features);
+}
+
+/// A tab page of grouped feature rows (Academics, Finance, Services). Working
+/// features are plain rows; features that open the UCAM site show an external
+/// link icon; features that are not available yet are collected into a muted
+/// group at the bottom so they stay discoverable without cluttering the list.
+/// On wide screens the groups flow into two columns.
+class HubPage extends StatelessWidget {
+  final String title;
+  final List<HubGroup> groups;
+  final Widget? header;
+  const HubPage({
+    super.key,
+    required this.title,
+    required this.groups,
+    this.header,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final available = <HubGroup>[];
+    final unavailable = <HubFeature>[];
+    for (final g in groups) {
+      final live = g.features
+          .where((f) => f.status != FeatureStatus.comingSoon)
+          .toList();
+      unavailable
+          .addAll(g.features.where((f) => f.status == FeatureStatus.comingSoon));
+      if (live.isNotEmpty) available.add(HubGroup(g.label, live));
+    }
+
+    return PageScaffold(
+      title: title,
+      showBack: false,
+      actions: const [ProfileButton()],
+      body: Stacked(
+        children: [
+          if (header != null) header!,
+          ResponsiveGrid(
+            maxColumns: 2,
+            stretch: false,
+            spacing: Spacing.xl,
+            runSpacing: Spacing.xl,
+            children: [
+              for (final g in available)
+                RowGroup(
+                  title: g.label,
+                  children: [for (final f in g.features) _row(context, f)],
+                ),
+              if (unavailable.isNotEmpty)
+                RowGroup(
+                  title: 'Not available yet',
+                  trailing: const Text('Opens in UCAM'),
+                  children: [
+                    for (final f in unavailable) _row(context, f, muted: true),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, HubFeature f, {bool muted = false}) {
+    return ListRow(
+      icon: f.icon,
+      title: f.title,
+      subtitle: f.subtitle,
+      muted: muted,
+      external: f.status == FeatureStatus.opensInUcam,
+      onTap: () {
+        if (f.onTap != null) {
+          f.onTap!(context);
+        } else if (f.status == FeatureStatus.opensInUcam) {
+          openUcam(context);
+        } else {
+          Navigator.of(context).push(appRoute(
+            ComingSoonPage(title: f.title, icon: f.icon),
+          ));
+        }
+      },
+    );
+  }
 }

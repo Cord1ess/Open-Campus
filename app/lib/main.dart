@@ -77,16 +77,14 @@ class OpenCampusApp extends ConsumerWidget {
       // snap). Cheap now that the ThemeData itself is memoized.
       themeAnimationDuration: Motion.fast,
       themeAnimationCurve: Motion.emphasized,
-      // Clamp system text scaling so very large accessibility font sizes don't
-      // break tight layouts (nav bar, stat cards). Still allows modest scaling.
-      // Perf: MediaQuery.withClampedTextScaling subscribes to the text-scale
-      // factor ONLY — the old MediaQuery.of(context) here subscribed to every MQ
-      // property, so any size/inset/scrollbar change rebuilt the whole app
-      // subtree. AnnotatedRegion is a no-op on web, kept for mobile.
+      // Allow generous system text scaling (layouts wrap and figures shrink to
+      // fit); clamp only the extreme end so dense tables stay usable.
+      // MediaQuery.withClampedTextScaling subscribes to the text-scale factor
+      // only, so unrelated MediaQuery changes don't rebuild the whole app.
       builder: (context, child) {
         Widget app = MediaQuery.withClampedTextScaling(
           minScaleFactor: 1.0,
-          maxScaleFactor: 1.15,
+          maxScaleFactor: 1.3,
           child: child!,
         );
         // Global session-expired overlay: sits above EVERY screen (via a Stack in
@@ -194,9 +192,11 @@ class _RootState extends ConsumerState<_Root> {
       _sawLogin = true;
     }
 
+    // A short cross-fade between launch stages (splash → login → app) so the
+    // hand-off isn't a hard cut; no slide or scale.
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 450),
-      switchInCurve: const Cubic(0.05, 0.7, 0.1, 1.0),
+      duration: Motion.medium,
+      switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeOut,
       child: KeyedSubtree(key: ValueKey(key), child: child),
     );

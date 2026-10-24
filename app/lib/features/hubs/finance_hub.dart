@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../shared/stat_tiles.dart';
 import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
@@ -18,64 +17,54 @@ class FinanceHub extends ConsumerWidget {
     final home = ref.watch(homeProvider);
     final h = home is ResData<HomeSummary> ? home.loaded.data : null;
     final hasDue = h?.hasDue ?? false;
-    final scheme = context.scheme;
+    final p = context.palette;
+
+    void go(BuildContext c, Widget page) =>
+        Navigator.of(c).push(appRoute(page));
 
     return HubPage(
       title: 'Finance',
-      header: StatRow(tiles: [
-        // Filled focal tile — orange when there's a due, blue when clear.
-        StatTile(
-          icon: hasDue ? Icons.error_outline : Icons.check_circle_outline,
-          label: hasDue ? 'Due' : 'Balance',
-          value: h == null
-              ? '—'
-              : hasDue
-                  ? bdt(h.dueAmount)
-                  : 'Clear',
-          accent: hasDue ? scheme.primary : scheme.secondary,
-          filled: true,
+      header: StatStrip(items: [
+        StatBlock(
+          label: hasDue ? 'Amount due' : 'Balance',
+          value: h == null ? '—' : (hasDue ? bdt(h.dueAmount) : 'Clear'),
+          valueColor: h == null
+              ? null
+              : (hasDue ? p.warningInk : p.successInk),
         ),
-        StatTile(
-          icon: Icons.account_balance_wallet_outlined,
-          label: 'Total paid',
-          value: h?.totalPaid != null ? bdt(h!.totalPaid) : '—',
-          accent: scheme.secondary,
-        ),
-        StatTile(
-          icon: Icons.savings_outlined,
-          label: 'Waived',
-          value: h?.totalWaived != null ? bdt(h!.totalWaived) : '—',
-          accent: scheme.secondary,
-        ),
+        StatBlock(
+            label: 'Total paid',
+            value: h?.totalPaid != null ? bdt(h!.totalPaid) : '—'),
+        StatBlock(
+            label: 'Waived',
+            value: h?.totalWaived != null ? bdt(h!.totalWaived) : '—'),
       ]),
       groups: [
         HubGroup('Account', [
           HubFeature(
-            icon: Icons.account_balance_wallet_outlined,
+            icon: AppIcons.dues,
             title: 'Balance & Dues',
-            subtitle: 'Outstanding amount & balance',
-            status: FeatureStatus.live,
-            onTap: (c) => Navigator.of(c).push(sharedAxisRoute(const BillPage())),
+            subtitle: 'Outstanding amount and installment plan',
+            onTap: (c) => go(c, const BillPage()),
           ),
           HubFeature(
-            icon: Icons.receipt_long_outlined,
+            icon: AppIcons.payments,
             title: 'Payment History',
-            subtitle: 'Bills & payments by trimester',
-            status: FeatureStatus.live,
-            onTap: (c) => Navigator.of(c)
-                .push(sharedAxisRoute(const PaymentHistoryPage())),
+            subtitle: 'Bills and payments by trimester',
+            onTap: (c) => go(c, const PaymentHistoryPage()),
           ),
           const HubFeature(
-            icon: Icons.request_quote_outlined,
+            icon: AppIcons.invoices,
             title: 'Invoices & Fees',
-            subtitle: 'Fee structure & invoices',
+            subtitle: 'Fee structure and invoices',
+            status: FeatureStatus.comingSoon,
           ),
         ]),
         const HubGroup('Pay', [
           HubFeature(
-            icon: Icons.payment_outlined,
+            icon: AppIcons.pay,
             title: 'Pay Now',
-            subtitle: 'Opens UCAM payment gateway',
+            subtitle: 'Opens the UCAM payment page',
             status: FeatureStatus.opensInUcam,
           ),
         ]),

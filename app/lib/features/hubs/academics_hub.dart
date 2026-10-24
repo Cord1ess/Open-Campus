@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_theme.dart';
-import '../../shared/stat_tiles.dart';
 import '../../shared/widgets.dart';
 import '../academics/advising_page.dart';
 import '../academics/calendar_page.dart';
@@ -32,138 +30,110 @@ class AcademicsHub extends ConsumerWidget {
         ? attendance.loaded.data
         : null;
     final att = a != null ? overallAttendancePct(a) : null;
-    final scheme = context.scheme;
+
+    void go(BuildContext c, Widget page) =>
+        Navigator.of(c).push(appRoute(page));
 
     return HubPage(
       title: 'Academics',
-      header: StatRow(tiles: [
-        StatTile(
-          icon: Icons.workspace_premium,
-          label: 'CGPA',
-          value: h?.cgpa?.toStringAsFixed(2) ?? '—',
-          accent: scheme.primary,
-          filled: true,
-        ),
-        StatTile(
-          icon: Icons.event_available,
-          label: 'Attendance',
-          value: att != null ? '${att.toStringAsFixed(0)}%' : '—',
-          accent: scheme.secondary,
-        ),
-        StatTile(
-          icon: Icons.school_outlined,
-          label: 'Credits',
-          value: h?.completedCredits?.toStringAsFixed(0) ?? '—',
-          accent: scheme.secondary,
-        ),
+      header: StatStrip(items: [
+        StatBlock(label: 'CGPA', value: h?.cgpa?.toStringAsFixed(2) ?? '—'),
+        StatBlock(
+            label: 'Attendance',
+            value: att != null ? '${att.toStringAsFixed(0)}%' : '—'),
+        StatBlock(
+            label: 'Credits',
+            value: h?.completedCredits?.toStringAsFixed(0) ?? '—'),
       ]),
       groups: [
         HubGroup('Performance', [
           HubFeature(
-            icon: Icons.school_outlined,
+            icon: AppIcons.results,
             title: 'Results',
-            subtitle: 'Semester GPA & CGPA',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const ResultsPage())),
+            subtitle: 'Semester GPA and CGPA',
+            onTap: (c) => go(c, const ResultsPage()),
           ),
           HubFeature(
-            icon: Icons.event_available_outlined,
+            icon: AppIcons.attendance,
             title: 'Attendance',
-            subtitle: 'Per-course attendance',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const AttendancePage())),
+            subtitle: 'Per-course attendance and marks lost',
+            onTap: (c) => go(c, const AttendancePage()),
           ),
           HubFeature(
-            icon: Icons.assignment_turned_in_outlined,
+            icon: AppIcons.marks,
             title: 'Course Marks',
             subtitle: 'Item-wise marks per course',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const MarksPage())),
+            onTap: (c) => go(c, const MarksPage()),
           ),
           HubFeature(
-            icon: Icons.grading_outlined,
+            icon: AppIcons.grades,
             title: 'Course Grades',
-            subtitle: 'Every course, grade & credit',
-            status: FeatureStatus.live,
-            onTap: (c) => Navigator.of(c)
-                .push(sharedAxisRoute(const CourseHistoryPage())),
+            subtitle: 'Every course, grade and credit',
+            onTap: (c) => go(c, const CourseHistoryPage()),
           ),
         ]),
-        HubGroup('Records', [
+        HubGroup('Schedule', [
           HubFeature(
-            icon: Icons.campaign_outlined,
-            title: 'Notices',
-            subtitle: 'Latest UIU notices',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const UiuNoticesPage())),
-          ),
-          HubFeature(
-            icon: Icons.calendar_view_week_outlined,
+            icon: AppIcons.routine,
             title: 'Class Routine',
             subtitle: 'Weekly timetable',
-            status: FeatureStatus.live,
-            onTap: (c) => Navigator.of(c)
-                .push(sharedAxisRoute(const ClassRoutinePage())),
+            onTap: (c) => go(c, const ClassRoutinePage()),
           ),
           HubFeature(
-            icon: Icons.event_note_outlined,
+            icon: AppIcons.exams,
             title: 'Exam Schedule',
             subtitle: 'Published exam routines',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const ExamRoutinePage())),
+            onTap: (c) => go(c, const ExamRoutinePage()),
           ),
           HubFeature(
-            icon: Icons.calendar_month_outlined,
+            icon: AppIcons.calendar,
             title: 'Academic Calendar',
-            subtitle: 'Term dates & reminders',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const CalendarPage())),
+            subtitle: 'Term dates and reminders',
+            onTap: (c) => go(c, const CalendarPage()),
+          ),
+          HubFeature(
+            icon: AppIcons.notices,
+            title: 'Notices',
+            subtitle: 'Latest UIU notices',
+            onTap: (c) => go(c, const UiuNoticesPage()),
           ),
         ]),
         HubGroup('Registration', [
           HubFeature(
-            icon: Icons.assignment_outlined,
+            icon: AppIcons.advising,
             title: 'Pre-Advising',
-            subtitle: 'Plan next semester',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const AdvisingPage())),
+            subtitle: 'Courses offered next term',
+            onTap: (c) => go(c, const AdvisingPage()),
           ),
           HubFeature(
-            icon: Icons.event_seat_outlined,
+            icon: AppIcons.sections,
             title: 'Section Selection',
-            subtitle: 'Your sections · faculty · simulator',
-            status: FeatureStatus.live,
-            onTap: (c) =>
-                Navigator.of(c).push(sharedAxisRoute(const YourSectionsPage())),
+            subtitle: 'Sections, faculty and schedule planner',
+            onTap: (c) => go(c, const YourSectionsPage()),
           ),
           const HubFeature(
-            icon: Icons.swap_horiz_outlined,
+            icon: AppIcons.courseRequests,
             title: 'Course Requests',
-            subtitle: 'Open · withdraw · credit limit',
+            subtitle: 'Open, withdraw, credit limit',
+            status: FeatureStatus.comingSoon,
           ),
           const HubFeature(
-            icon: Icons.groups_outlined,
+            icon: AppIcons.fyp,
             title: 'FYP Group',
             subtitle: 'Final-year project group',
+            status: FeatureStatus.comingSoon,
           ),
-        ]),
-        const HubGroup('Others', [
-          HubFeature(
-            icon: Icons.description_outlined,
+          const HubFeature(
+            icon: AppIcons.transcript,
             title: 'Transcript',
             subtitle: 'Full academic transcript',
+            status: FeatureStatus.comingSoon,
           ),
-          HubFeature(
-            icon: Icons.military_tech_outlined,
+          const HubFeature(
+            icon: AppIcons.degree,
             title: 'Degree Progress',
-            subtitle: 'Credits done & remaining',
+            subtitle: 'Credits done and remaining',
+            status: FeatureStatus.comingSoon,
           ),
         ]),
       ],

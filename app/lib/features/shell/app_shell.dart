@@ -2,16 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/app_icons.dart';
+import '../../shared/brand_logo.dart';
+import '../../shared/responsive.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_page.dart';
 import '../hubs/academics_hub.dart';
 import '../hubs/finance_hub.dart';
 import '../hubs/services_hub.dart';
-import 'floating_nav_bar.dart';
 
-/// Top-level navigation shell with a floating Expressive nav bar. The body
-/// extends behind the bar; pages add bottom padding so content clears it.
-/// On wide screens it switches to a NavigationRail.
+class _Destination {
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  const _Destination(this.label, this.icon, this.selectedIcon);
+}
+
+/// Top-level navigation: a standard bottom navigation bar on phones, a
+/// navigation rail on medium/expanded widths (extended with labels beside the
+/// icons from 1200 px). Tabs stay alive in an IndexedStack so each keeps its
+/// scroll position and loaded data.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -25,9 +35,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
-    // Let the shell + dashboard UI mount FIRST, then kick off the data fetches.
-    // This avoids the race where providers fetched at creation time beat the
-    // auth token / first frame and left the app blank until a manual reload.
+    // Mount the UI first, then kick off the data fetches so the first fetch
+    // never races the restored auth token.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(homeProvider.notifier).ensureLoaded();
@@ -37,12 +46,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
-  static const _items = <NavItem>[
-    NavItem('Home', Icons.dashboard_outlined, Icons.dashboard_rounded),
-    NavItem('Academics', Icons.school_outlined, Icons.school_rounded),
-    NavItem('Finance', Icons.account_balance_wallet_outlined,
-        Icons.account_balance_wallet_rounded),
-    NavItem('Services', Icons.apps_outlined, Icons.apps_rounded),
+  static const _items = <_Destination>[
+    _Destination('Home', AppIcons.home, AppIcons.homeSelected),
+    _Destination('Academics', AppIcons.academics, AppIcons.academicsSelected),
+    _Destination('Finance', AppIcons.finance, AppIcons.financeSelected),
+    _Destination('Services', AppIcons.services, AppIcons.servicesSelected),
   ];
 
   static const _pages = <Widget>[
@@ -52,43 +60,55 @@ class _AppShellState extends ConsumerState<AppShell> {
     ServicesHub(),
   ];
 
+  void _select(int i) {
+    if (i == _index) return;
+    setState(() => _index = i);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 720;
+    final width = Breakpoints.width(context);
+    final useRail = width >= Breakpoints.expanded;
+    final extended = width >= Breakpoints.large;
 
-    // IndexedStack keeps all four tabs alive, so switching tabs preserves each
-    // page's scroll position and loaded data instead of rebuilding (and
-    // re-fetching) it every visit. Content width is capped per page.
     final body = IndexedStack(
       index: _index,
       sizing: StackFit.expand,
-      children: [
-        for (final page in _pages) _MaxWidth(child: page),
-      ],
+      children: _pages,
     );
 
-    if (wide) {
+    if (useRail) {
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _index,
-              onDestinationSelected: _select,
-              labelType: NavigationRailLabelType.all,
-              // Wider rail + circular selection indicator with room to breathe,
-              // so the selected icon sits in a clean circle (not a squashed pill).
-              minWidth: 88,
-              groupAlignment: -0.85,
-              useIndicator: true,
-              destinations: [
-                for (final it in _items)
-                  NavigationRailDestination(
-                    icon: Icon(it.icon),
-                    selectedIcon: Icon(it.selectedIcon),
-                    label: Text(it.label),
-                    padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
-                  ),
-              ],
+            SafeArea(
+              child: NavigationRail(
+                selectedIndex: _index,
+                onDestinationSelected: _select,
+                extended: extended,
+                labelType: extended
+                    ? NavigationRailLabelType.none
+                    : NavigationRailLabelType.all,
+                groupAlignment: -1,
+                leading: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      Spacing.lg, Spacing.md, Spacing.lg, Spacing.xl),
+                  child: extended
+                      ? const Align(
+                          alignment: Alignment.centerLeft,
+                          child: BrandLogo(height: 30))
+                      : const BrandIcon(size: 28),
+                ),
+                destinations: [
+                  for (final it in _items)
+                    NavigationRailDestination(
+                      icon: Icon(it.icon),
+                      selectedIcon: Icon(it.selectedIcon),
+                      label: Text(it.label),
+                      padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+                    ),
+                ],
+              ),
             ),
             const VerticalDivider(width: 1),
             Expanded(child: body),
@@ -98,43 +118,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
 
     return Scaffold(
-      extendBody: true,
       body: body,
-      bottomNavigationBar: FloatingNavBar(
-        items: _items,
-        index: _index,
-        onSelect: _select,
-      ),
-    );
-  }
-
-  void _select(int i) {
-    if (i == _index) return;
-    setState(() => _index = i);
-  }
-}
-
-/// Caps page content width and centers it. On phones/tablets the content fills
-/// the width; on desktop it expands to a generous working width (so the app
-/// uses the screen instead of sitting as a narrow tablet column) while still
-/// capping at an ultrawide ceiling for readability. Pages lay their content out
-/// in responsive grids (see [Breakpoints]) to fill this space.
-class _MaxWidth extends StatelessWidget {
-  final Widget child;
-  const _MaxWidth({required this.child});
-
-  // Ultrawide ceiling — beyond this, padding grows instead of line length.
-  static const _max = 1320.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    if (width <= _max) return child;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: _max),
-        child: child,
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Divider(height: 1),
+          NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: _select,
+            destinations: [
+              for (final it in _items)
+                NavigationDestination(
+                  icon: Icon(it.icon),
+                  selectedIcon: Icon(it.selectedIcon),
+                  label: it.label,
+                  tooltip: it.label,
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
