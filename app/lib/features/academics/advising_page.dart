@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../common/coming_soon_page.dart';
+import '../common/course_names.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
 import 'advising_model.dart';
@@ -51,6 +52,7 @@ class _Content extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final note = InfoNote(
+      tone: StatusTone.accent,
       title: 'Pre-advise on UCAM',
       icon: AppIcons.advising,
       text: 'Use this list to plan, then submit your pre-advising on the UCAM '
@@ -66,11 +68,13 @@ class _Content extends StatelessWidget {
       return Stacked(
         gap: Spacing.lg,
         children: [
-          const EmptyState(
-              icon: AppIcons.advising,
-              title: 'Nothing to advise',
-              message: 'No advising data is available right now.'),
-          note,
+          const Reveal(
+            child: EmptyState(
+                icon: AppIcons.advising,
+                title: 'Nothing to advise',
+                message: 'No advising data is available right now.'),
+          ),
+          Reveal(index: 1, child: note),
         ],
       );
     }
@@ -96,7 +100,8 @@ class _Content extends StatelessWidget {
                 for (final c in offered)
                   _CourseRow(
                     c,
-                    taken: c.code != null && takenCodes.contains(_norm(c.code!)),
+                    taken:
+                        c.code != null && takenCodes.contains(_norm(c.code!)),
                   ),
               ],
             ),
@@ -110,7 +115,10 @@ class _Content extends StatelessWidget {
       body = available ?? taken ?? const SizedBox.shrink();
     }
 
-    return Stacked(children: [note, body]);
+    return Stacked(children: [
+      Reveal(child: note),
+      Reveal(index: 1, child: body),
+    ]);
   }
 
   static String _norm(String code) =>
@@ -124,8 +132,9 @@ class _CourseRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = [
-      if (c.title != null && c.title!.isNotEmpty) c.title!,
+    final scheme = context.scheme;
+    final extra = [
+      '${c.credit?.toStringAsFixed(0) ?? '—'} cr',
       if (c.offeredTrimester != null && c.offeredTrimester!.isNotEmpty)
         c.offeredTrimester!,
     ].join(' · ');
@@ -135,13 +144,30 @@ class _CourseRow extends StatelessWidget {
         : (c.mandatory
             ? const StatusBadge('Required', tone: StatusTone.accent)
             : null);
-    return ListRow(
-      title: c.code ?? '—',
-      subtitle: subtitle.isEmpty ? null : subtitle,
-      muted: taken,
-      chevron: false,
-      value: '${c.credit?.toStringAsFixed(0) ?? '—'} cr',
-      trailing: badge,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.lg + 4, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: CourseName(
+                code: c.code ?? '—',
+                title: c.title,
+                extra: extra,
+                titleStyle: context.text.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: taken ? scheme.onSurfaceVariant : null),
+              ),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: Spacing.md),
+              badge,
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -162,7 +188,13 @@ class _TakenSummary extends StatelessWidget {
         spacing: Spacing.sm,
         runSpacing: Spacing.sm,
         children: [
-          for (final c in taken) StatusBadge(c.code ?? '—'),
+          for (final c in taken)
+            StatusBadge(
+              (c.title != null && c.title!.isNotEmpty)
+                  ? '${c.title} · ${c.code ?? ''}'
+                  : (c.code ?? '—'),
+              tone: StatusTone.success,
+            ),
         ],
       ),
     );

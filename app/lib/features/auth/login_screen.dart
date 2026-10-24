@@ -94,10 +94,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final canvas = context.palette.canvas;
     return Scaffold(
-      backgroundColor: scheme.surface,
+      backgroundColor: canvas,
       appBar: AppBar(
-        backgroundColor: scheme.surface,
+        backgroundColor: canvas,
         actions: [
           IconButton(
             onPressed: _openSettings,
@@ -112,8 +113,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           padding: const EdgeInsets.all(Spacing.xl),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: _StaggerColumn(
               children: [
                 const Center(child: BrandLogo(height: 56)),
                 const SizedBox(height: Spacing.xl),
@@ -194,13 +194,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ? Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: scheme.onSurfaceVariant),
-                            ),
+                            ExpressiveLoader(
+                                size: 20, color: scheme.onSurfaceVariant),
                             const SizedBox(width: Spacing.sm),
                             const Text('Signing in…'),
                           ],
@@ -235,6 +230,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A stretched column whose content rises in one item after another (spacers
+/// are passed through untouched so the stagger follows the visible blocks).
+class _StaggerColumn extends StatelessWidget {
+  final List<Widget> children;
+  const _StaggerColumn({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    var i = 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final c in children)
+          c is SizedBox ? c : Reveal(index: i++, child: c),
+      ],
     );
   }
 }

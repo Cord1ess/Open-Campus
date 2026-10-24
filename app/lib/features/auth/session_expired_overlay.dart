@@ -31,32 +31,34 @@ class SessionExpiredOverlay extends ConsumerWidget {
             constraints: const BoxConstraints(maxWidth: 380),
             child: Padding(
               padding: const EdgeInsets.all(Spacing.xl),
-              child: Panel(
-                padding: const EdgeInsets.all(Spacing.xl),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Center(child: BrandIcon(size: 40)),
-                    const SizedBox(height: Spacing.lg),
-                    Text('Session expired',
+              child: Reveal(
+                child: Panel(
+                  padding: const EdgeInsets.all(Spacing.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(child: BrandIcon(size: 40)),
+                      const SizedBox(height: Spacing.lg),
+                      Text('Session expired',
+                          textAlign: TextAlign.center,
+                          style: context.text.titleMedium),
+                      const SizedBox(height: Spacing.sm),
+                      Text(
+                        'Your UCAM session ended, so the data on screen may be out '
+                        'of date. Log in again to continue with fresh, live data.',
                         textAlign: TextAlign.center,
-                        style: context.text.titleMedium),
-                    const SizedBox(height: Spacing.sm),
-                    Text(
-                      'Your UCAM session ended, so the data on screen may be out '
-                      'of date. Log in again to continue with fresh, live data.',
-                      textAlign: TextAlign.center,
-                      style: context.text.bodyMedium
-                          ?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: Spacing.xl),
-                    FilledButton(
-                      onPressed: () =>
-                          ref.read(authControllerProvider.notifier).relogin(),
-                      child: const Text('Log in again'),
-                    ),
-                  ],
+                        style: context.text.bodyMedium
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: Spacing.xl),
+                      FilledButton(
+                        onPressed: () =>
+                            ref.read(authControllerProvider.notifier).relogin(),
+                        child: const Text('Log in again'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -28,16 +28,21 @@ class FinanceHub extends ConsumerWidget {
         StatBlock(
           label: hasDue ? 'Amount due' : 'Balance',
           value: h == null ? '—' : (hasDue ? bdt(h.dueAmount) : 'Clear'),
-          valueColor: h == null
-              ? null
-              : (hasDue ? p.warningInk : p.successInk),
+          numeric: hasDue ? h?.dueAmount : null,
+          format: bdt,
+          valueColor: h == null ? null : (hasDue ? p.warningInk : p.successInk),
         ),
         StatBlock(
-            label: 'Total paid',
-            value: h?.totalPaid != null ? bdt(h!.totalPaid) : '—'),
+          label: 'Total paid',
+          value: h?.totalPaid != null ? bdt(h!.totalPaid) : '—',
+          secretId: h?.totalPaid != null ? Secrets.totalPaid : null,
+        ),
         StatBlock(
-            label: 'Waived',
-            value: h?.totalWaived != null ? bdt(h!.totalWaived) : '—'),
+          label: 'Waived',
+          value: h?.totalWaived != null ? bdt(h!.totalWaived) : '—',
+          numeric: h?.totalWaived,
+          format: bdt,
+        ),
       ]),
       groups: [
         HubGroup('Account', [

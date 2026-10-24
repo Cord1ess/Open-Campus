@@ -7,9 +7,8 @@
 // selection simulator. No live seat occupancy — `capacity` is the section's
 // fixed size, not how many seats remain.
 
-int? _intN(dynamic v) => v is num
-    ? v.toInt()
-    : (v is String ? int.tryParse(v) : null);
+int? _intN(dynamic v) =>
+    v is num ? v.toInt() : (v is String ? int.tryParse(v) : null);
 double? _numN(dynamic v) => v is num
     ? v.toDouble()
     : (v is String ? double.tryParse(v.replaceAll(',', '')) : null);
@@ -55,7 +54,8 @@ class ScheduleSlot {
   final String start; // "HH:MM"
   final String end; // "HH:MM"
 
-  const ScheduleSlot({required this.day, required this.start, required this.end});
+  const ScheduleSlot(
+      {required this.day, required this.start, required this.end});
 
   factory ScheduleSlot.fromJson(Map<String, dynamic> j) => ScheduleSlot(
         day: _strN(j['day']) ?? '',

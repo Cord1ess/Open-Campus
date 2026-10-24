@@ -25,15 +25,20 @@ class RegistrationClosedPage extends StatelessWidget {
       body: Column(
         children: [
           const SizedBox(height: Spacing.xl),
-          const StatusBadge('Registration is closed',
-              tone: StatusTone.warning, icon: AppIcons.locked),
-          EmptyState(
-            icon: icon,
-            title: title,
-            message: description,
-            actionLabel: 'Check on UCAM',
-            actionIcon: AppIcons.external,
-            onAction: () => openUcam(context),
+          const Reveal(
+            child: StatusBadge('Registration is closed',
+                tone: StatusTone.warning, icon: AppIcons.locked),
+          ),
+          Reveal(
+            index: 1,
+            child: EmptyState(
+              icon: icon,
+              title: title,
+              message: description,
+              actionLabel: 'Check on UCAM',
+              actionIcon: AppIcons.external,
+              onAction: () => openUcam(context),
+            ),
           ),
         ],
       ),

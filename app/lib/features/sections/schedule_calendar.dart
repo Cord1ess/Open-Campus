@@ -60,7 +60,8 @@ class ScheduleCalendarView extends StatelessWidget {
       );
     }
 
-    var minStart = meetings.map((m) => m.startMin).reduce((a, b) => a < b ? a : b);
+    var minStart =
+        meetings.map((m) => m.startMin).reduce((a, b) => a < b ? a : b);
     var maxEnd = meetings.map((m) => m.endMin).reduce((a, b) => a > b ? a : b);
     minStart = (minStart ~/ 60) * 60;
     maxEnd = ((maxEnd + 59) ~/ 60) * 60;
@@ -86,7 +87,8 @@ class ScheduleCalendarView extends StatelessWidget {
         height: _headerH + gridH + _pad * 2,
         child: Stack(
           children: [
-            ..._hourLines(context, minStart, maxEnd, gridW, colW, dayset.length),
+            ..._hourLines(
+                context, minStart, maxEnd, gridW, colW, dayset.length),
             for (var d = 0; d < dayset.length; d++)
               Positioned(
                 left: _hourLabelW + d * colW,
@@ -145,8 +147,7 @@ class ScheduleCalendarView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: Spacing.xs),
-            Expanded(
-                child: Container(height: 1, color: scheme.outlineVariant)),
+            Expanded(child: Container(height: 1, color: scheme.outlineVariant)),
           ],
         ),
       ));
@@ -242,7 +243,9 @@ class ScheduleCalendarView extends StatelessWidget {
         var clusterEnd = dayMeetings[i].endMin;
         var j = i + 1;
         while (j < dayMeetings.length && dayMeetings[j].startMin < clusterEnd) {
-          if (dayMeetings[j].endMin > clusterEnd) clusterEnd = dayMeetings[j].endMin;
+          if (dayMeetings[j].endMin > clusterEnd) {
+            clusterEnd = dayMeetings[j].endMin;
+          }
           j++;
         }
         final cluster = dayMeetings.sublist(i, j);

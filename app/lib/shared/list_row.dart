@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/theme/motion.dart';
 import 'app_icons.dart';
 
 /// A heading for a group of content: bold title at left, optional trailing
@@ -108,12 +109,13 @@ class Panel extends StatelessWidget {
             data: IconThemeData(color: p.onContainer), child: content),
       );
     }
-    return Material(
+    final card = Material(
       color: bg,
       shape: shape,
       clipBehavior: Clip.antiAlias,
       child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
+    return onTap == null ? card : PressScale(child: card);
   }
 }
 

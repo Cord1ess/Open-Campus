@@ -1,8 +1,9 @@
 // UIU public notices model — mirrors GET /calendar/notices/uiu?page=N.
 
 String? _strN(dynamic v) => v?.toString();
-int _intN(dynamic v, [int fallback = 1]) =>
-    v is num ? v.toInt() : (v is String ? int.tryParse(v) ?? fallback : fallback);
+int _intN(dynamic v, [int fallback = 1]) => v is num
+    ? v.toInt()
+    : (v is String ? int.tryParse(v) ?? fallback : fallback);
 
 class UiuNotice {
   final String title;

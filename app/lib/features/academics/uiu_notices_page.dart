@@ -37,8 +37,8 @@ class _UiuNoticesPageState extends ConsumerState<UiuNoticesPage> {
   }
 
   Future<void> _open(String url) async {
-    final ok = await launchUrl(Uri.parse(url),
-        mode: LaunchMode.externalApplication);
+    final ok =
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open the notice.')));
@@ -52,17 +52,23 @@ class _UiuNoticesPageState extends ConsumerState<UiuNoticesPage> {
       title: 'Notices',
       controller: _scroll,
       onRefresh: () async => ref.invalidate(uiuNoticesProvider(_page)),
-      body: async.when(
-        loading: () => const LoadingState(label: 'Loading notices…'),
-        error: (e, _) => ErrorState(
-          title: 'Couldn’t load notices',
-          message: '$e',
-          onRetry: () => ref.invalidate(uiuNoticesProvider(_page)),
-        ),
-        data: (data) => _NoticesList(
-          data: data,
-          onOpen: _open,
-          onPage: (p) => _goTo(p, data.totalPages),
+      body: AnimatedSwitcher(
+        duration: Motion.medium,
+        child: async.when(
+          loading: () => const LoadingState(
+              key: ValueKey('loading'), label: 'Loading notices…'),
+          error: (e, _) => ErrorState(
+            key: const ValueKey('error'),
+            title: 'Couldn’t load notices',
+            message: '$e',
+            onRetry: () => ref.invalidate(uiuNoticesProvider(_page)),
+          ),
+          data: (data) => _NoticesList(
+            key: ValueKey('page-${data.page}'),
+            data: data,
+            onOpen: _open,
+            onPage: (p) => _goTo(p, data.totalPages),
+          ),
         ),
       ),
     );
@@ -74,6 +80,7 @@ class _NoticesList extends StatelessWidget {
   final void Function(String) onOpen;
   final void Function(int) onPage;
   const _NoticesList({
+    super.key,
     required this.data,
     required this.onOpen,
     required this.onPage,
@@ -83,35 +90,45 @@ class _NoticesList extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     if (data.notices.isEmpty) {
-      return const EmptyState(
-          icon: AppIcons.notices, title: 'No notices');
+      return const EmptyState(icon: AppIcons.notices, title: 'No notices');
     }
+    const hues = [Hue.lavender, Hue.sky, Hue.peach, Hue.mint, Hue.pink];
     return Stacked(
       gap: Spacing.lg,
       children: [
         // Source attribution.
-        Row(
-          children: [
-            Icon(AppIcons.link, size: 14, color: scheme.onSurfaceVariant),
-            const SizedBox(width: Spacing.sm),
-            Text('Live from uiu.ac.bd/notice', style: context.text.bodySmall),
-          ],
+        Reveal(
+          child: Row(
+            children: [
+              Icon(AppIcons.link, size: 14, color: scheme.onSurfaceVariant),
+              const SizedBox(width: Spacing.sm),
+              Text('Live from uiu.ac.bd/notice', style: context.text.bodySmall),
+            ],
+          ),
         ),
-        RowGroup(
-          children: [
-            for (final n in data.notices)
-              ListRow(
-                title: n.title,
-                subtitle: n.dateText,
-                external: true,
-                onTap: () => onOpen(n.url),
-              ),
-          ],
+        Reveal(
+          index: 1,
+          child: RowGroup(
+            children: [
+              for (final (i, n) in data.notices.indexed)
+                ListRow(
+                  icon: AppIcons.notices,
+                  hue: hues[i % hues.length],
+                  title: n.title,
+                  subtitle: n.dateText,
+                  external: true,
+                  onTap: () => onOpen(n.url),
+                ),
+            ],
+          ),
         ),
-        _Pager(
-          page: data.page,
-          totalPages: data.totalPages,
-          onPage: onPage,
+        Reveal(
+          index: 2,
+          child: _Pager(
+            page: data.page,
+            totalPages: data.totalPages,
+            onPage: onPage,
+          ),
         ),
       ],
     );

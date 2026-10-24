@@ -112,10 +112,11 @@ class _FloatingBar extends StatelessWidget {
         child: Center(
           heightFactor: 1,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
+            constraints: const BoxConstraints(maxWidth: 400),
             child: Container(
               height: 64,
-              padding: const EdgeInsets.all(Spacing.sm),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Spacing.sm, vertical: Spacing.sm),
               decoration: BoxDecoration(
                 color: p.ink,
                 borderRadius: BorderRadius.circular(Radii.full),
@@ -124,7 +125,6 @@ class _FloatingBar extends StatelessWidget {
                 children: [
                   for (var i = 0; i < _items.length; i++)
                     Expanded(
-                      flex: i == index ? 2 : 1,
                       child: _BarItem(
                         item: _items[i],
                         selected: i == index,
@@ -151,42 +151,42 @@ class _BarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final fg = selected ? p.ink : p.onInk.withValues(alpha: 0.72);
     return Semantics(
       button: true,
       selected: selected,
       label: item.label,
       child: Tooltip(
         message: item.label,
-        child: InkWell(
+        child: InkResponse(
           onTap: onTap,
-          customBorder: const StadiumBorder(),
-          child: AnimatedContainer(
-            duration: Motion.medium,
-            curve: Motion.emphasizedDecelerate,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: selected ? p.onInk : Colors.transparent,
-              borderRadius: BorderRadius.circular(Radii.full),
-            ),
-            child: ExcludeSemantics(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(selected ? item.selectedIcon : item.icon,
-                      size: 22, color: fg),
-                  if (selected) ...[
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(item.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.fade,
-                          softWrap: false,
-                          style: context.text.labelLarge?.copyWith(
-                              color: fg, fontWeight: FontWeight.w600)),
+          radius: 28,
+          child: Center(
+            child: AnimatedScale(
+              scale: selected ? 1 : 0.92,
+              duration: Motion.medium,
+              curve: Curves.easeOutBack,
+              child: AnimatedContainer(
+                duration: Motion.medium,
+                curve: Motion.emphasizedDecelerate,
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: selected ? p.onInk : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+                child: ExcludeSemantics(
+                  child: AnimatedSwitcher(
+                    duration: Motion.fast,
+                    child: Icon(
+                      selected ? item.selectedIcon : item.icon,
+                      key: ValueKey(selected),
+                      size: 24,
+                      color: selected
+                          ? p.ink
+                          : p.onInk.withValues(alpha: 0.75),
                     ),
-                  ],
-                ],
+                  ),
+                ),
               ),
             ),
           ),

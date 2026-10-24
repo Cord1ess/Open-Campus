@@ -5,6 +5,7 @@ import '../../core/domain/grading.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../academics/course_history_model.dart';
+import '../common/course_names.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
 import 'gpa_widgets.dart';
@@ -52,19 +53,20 @@ class _AutoGpa extends ConsumerWidget {
       state: state,
       loadingLabel: 'Loading your course history…',
       errorTitle: 'Couldn’t load your course history',
-      onRetry: () =>
-          ref.read(courseHistoryProvider.notifier).load(force: true),
+      onRetry: () => ref.read(courseHistoryProvider.notifier).load(force: true),
       builder: (d) => _AutoGpaBody(d),
     );
   }
 }
 
-class _AutoGpaBody extends StatelessWidget {
+class _AutoGpaBody extends ConsumerWidget {
   final CourseHistoryData data;
   const _AutoGpaBody(this.data);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The CGPA stays masked here too until it's revealed with the eye toggle.
+    final cgpaShown = ref.watch(revealedSecretsProvider).contains(Secrets.cgpa);
     final cgpa = data.cgpa;
     final completed = data.completedCredits;
     final degreeReq = data.degreeRequirement;
@@ -90,24 +92,26 @@ class _AutoGpaBody extends StatelessWidget {
       autoFilled: true,
     );
 
-    return Stacked(
-      children: [
-        DataUsedPanel(rows: [
-          ('Current CGPA', cgpa.toStringAsFixed(2)),
-          ('Completed credits', completed.toStringAsFixed(1)),
-          if (degreeReq != null)
-            ('Degree requirement', degreeReq.toStringAsFixed(0)),
-          ('Courses on record', '${data.courses.length}'),
-          ('Running (ungraded) now', '${running.length}'),
-          if (retakes.isNotEmpty) ('Repeated courses found', '${retakes.length}'),
-        ]),
-        standing,
-        if (running.isNotEmpty)
-          _RunningProjection(running: running, cgpa: cgpa, completed: completed),
-        planner,
-        if (retakes.isNotEmpty) _RetakeImpact(retakes),
-      ],
-    );
+    final sections = <Widget>[
+      standing,
+      DataUsedPanel(rows: [
+        ('Current CGPA', cgpaShown ? cgpa.toStringAsFixed(2) : '••••'),
+        ('Completed credits', completed.toStringAsFixed(1)),
+        if (degreeReq != null)
+          ('Degree requirement', degreeReq.toStringAsFixed(0)),
+        ('Courses on record', '${data.courses.length}'),
+        ('Running (ungraded) now', '${running.length}'),
+        if (retakes.isNotEmpty) ('Repeated courses found', '${retakes.length}'),
+      ]),
+      if (running.isNotEmpty)
+        _RunningProjection(running: running, cgpa: cgpa, completed: completed),
+      planner,
+      if (retakes.isNotEmpty) _RetakeImpact(retakes),
+    ];
+    return Stacked(children: [
+      for (var i = 0; i < sections.length; i++)
+        Reveal(index: i, child: sections[i]),
+    ]);
   }
 
   /// Group graded attempts by course code; any code with 2+ graded attempts is a
@@ -143,7 +147,8 @@ class _RetakeGroup {
   final String code;
   final String name;
   final List<HistoryCourse> attempts;
-  _RetakeGroup({required this.code, required this.name, required this.attempts});
+  _RetakeGroup(
+      {required this.code, required this.name, required this.attempts});
 }
 
 class _CurrentStanding extends StatelessWidget {
@@ -155,20 +160,40 @@ class _CurrentStanding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final remaining =
-        degreeReq != null ? (degreeReq! - completed).clamp(0, degreeReq!) : null;
+    final remaining = degreeReq != null
+        ? (degreeReq! - completed).clamp(0, degreeReq!)
+        : null;
     return Section(
       title: 'Your standing',
       child: StatStrip(items: [
-        StatBlock(label: 'CGPA', value: cgpa.toStringAsFixed(2), large: true),
-        StatBlock(label: 'Completed', value: '${completed.toStringAsFixed(1)} cr'),
+        StatBlock(
+          label: 'CGPA',
+          value: cgpa.toStringAsFixed(2),
+          large: true,
+          secretId: Secrets.cgpa,
+          hue: Hue.lavender,
+        ),
+        StatBlock(
+          label: 'Completed',
+          value: '${completed.toStringAsFixed(1)} cr',
+          numeric: completed,
+          format: (v) => '${v.toStringAsFixed(1)} cr',
+          hue: Hue.mint,
+        ),
         if (degreeReq != null)
           StatBlock(
-              label: 'Degree requirement',
-              value: '${degreeReq!.toStringAsFixed(0)} cr'),
+            label: 'Degree requirement',
+            value: '${degreeReq!.toStringAsFixed(0)} cr',
+            hue: Hue.sky,
+          ),
         if (remaining != null)
           StatBlock(
-              label: 'Remaining', value: '${remaining.toStringAsFixed(0)} cr'),
+            label: 'Remaining',
+            value: '${remaining.toStringAsFixed(0)} cr',
+            numeric: remaining.toDouble(),
+            format: (v) => '${v.toStringAsFixed(0)} cr',
+            hue: Hue.peach,
+          ),
       ]),
     );
   }
@@ -271,13 +296,17 @@ class _RunningRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sub = [
-      if (course.courseCode != null) course.courseCode!,
-      if (course.credit != null) '${course.credit!.toStringAsFixed(1)} cr',
-    ].join(' · ');
-    return ListRow(
-      title: course.courseName ?? course.courseCode ?? 'Course',
-      subtitle: sub.isEmpty ? null : sub,
+    final credit = course.credit != null
+        ? '${course.credit!.toStringAsFixed(1)} cr'
+        : null;
+    return _CourseRowFrame(
+      course: CourseName(
+        code: course.courseCode ?? course.courseName ?? 'Course',
+        title: course.courseName,
+        extra: credit,
+        titleStyle:
+            context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+      ),
       trailing: GradeDropdown(value: value, onChanged: onChanged),
     );
   }
@@ -320,10 +349,15 @@ class _RetakeImpact extends StatelessWidget {
       credit: credit,
     );
     final improved = impact.improved;
-    return ListRow(
-      title: g.name,
-      subtitle: '${g.code} · ${first.grade ?? '?'} → ${best.grade ?? '?'} '
-          '(${g.attempts.length} attempts)',
+    return _CourseRowFrame(
+      course: CourseName(
+        code: g.code,
+        title: g.name == g.code ? null : g.name,
+        extra: '${first.grade ?? '?'} → ${best.grade ?? '?'} '
+            '(${g.attempts.length} attempts)',
+        titleStyle:
+            context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+      ),
       trailing: Text(
         improved
             ? '+${impact.countedImprovement.toStringAsFixed(2)} qp'
@@ -332,6 +366,31 @@ class _RetakeImpact extends StatelessWidget {
             color: improved ? p.successInk : context.scheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,
             fontFeatures: tabularFigures),
+      ),
+    );
+  }
+}
+
+/// A list row whose main content is a [CourseName] (title over code).
+class _CourseRowFrame extends StatelessWidget {
+  final Widget course;
+  final Widget trailing;
+  const _CourseRowFrame({required this.course, required this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.lg + 4, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(child: course),
+            const SizedBox(width: Spacing.md),
+            trailing,
+          ],
+        ),
       ),
     );
   }
@@ -347,10 +406,10 @@ class _ManualGpa extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Stacked(
       children: [
-        ManualCgpaCard(),
-        PlannerCard(),
-        ManualTargetCard(),
-        GradeChartCard(),
+        Reveal(child: ManualCgpaCard()),
+        Reveal(index: 1, child: PlannerCard()),
+        Reveal(index: 2, child: ManualTargetCard()),
+        Reveal(index: 3, child: GradeChartCard()),
       ],
     );
   }

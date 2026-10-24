@@ -13,8 +13,7 @@ class GoogleCalendar {
   // most common reason calendar apps reject a file with "unable to launch".
   static const _crlf = '\r\n';
 
-  static String _ymd(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}'
+  static String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}'
       '${d.month.toString().padLeft(2, '0')}'
       '${d.day.toString().padLeft(2, '0')}';
 
@@ -57,8 +56,8 @@ class GoogleCalendar {
 
   /// A strictly RFC 5545–compliant iCalendar document containing ALL [events] —
   /// the standard way to import a whole calendar into Google / Apple / Outlook.
-  static String icsFor(List<CalendarEvent> events, {String? calendarName,
-      DateTime? stampNow}) {
+  static String icsFor(List<CalendarEvent> events,
+      {String? calendarName, DateTime? stampNow}) {
     // A single fixed stamp for the whole document (passed in so callers can keep
     // it deterministic; defaults to now).
     final stamp = _dtStamp(stampNow ?? DateTime.now());

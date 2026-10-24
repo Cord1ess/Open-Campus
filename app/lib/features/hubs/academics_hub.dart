@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../academics/advising_page.dart';
 import '../academics/calendar_page.dart';
@@ -26,9 +27,8 @@ class AcademicsHub extends ConsumerWidget {
     final home = ref.watch(homeProvider);
     final attendance = ref.watch(attendanceProvider);
     final h = home is ResData<HomeSummary> ? home.loaded.data : null;
-    final a = attendance is ResData<AttendanceData>
-        ? attendance.loaded.data
-        : null;
+    final a =
+        attendance is ResData<AttendanceData> ? attendance.loaded.data : null;
     final att = a != null ? overallAttendancePct(a) : null;
 
     void go(BuildContext c, Widget page) =>
@@ -37,13 +37,24 @@ class AcademicsHub extends ConsumerWidget {
     return HubPage(
       title: 'Academics',
       header: StatStrip(items: [
-        StatBlock(label: 'CGPA', value: h?.cgpa?.toStringAsFixed(2) ?? '—'),
         StatBlock(
-            label: 'Attendance',
-            value: att != null ? '${att.toStringAsFixed(0)}%' : '—'),
+          label: 'CGPA',
+          value: h?.cgpa?.toStringAsFixed(2) ?? '—',
+          secretId: h?.cgpa != null ? Secrets.cgpa : null,
+        ),
         StatBlock(
-            label: 'Credits',
-            value: h?.completedCredits?.toStringAsFixed(0) ?? '—'),
+          label: 'Attendance',
+          value: att != null ? '${att.toStringAsFixed(0)}%' : '—',
+          numeric: att,
+          format: (v) => '${v.toStringAsFixed(0)}%',
+          hue: att != null && att < 70 ? Hue.rose : null,
+        ),
+        StatBlock(
+          label: 'Credits',
+          value: h?.completedCredits?.toStringAsFixed(0) ?? '—',
+          numeric: h?.completedCredits,
+          format: (v) => v.toStringAsFixed(0),
+        ),
       ]),
       groups: [
         HubGroup('Performance', [

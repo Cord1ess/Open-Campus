@@ -52,7 +52,8 @@ String bdt(double? v, {bool signed = false}) {
   if (v == null) return '—';
   final neg = v < 0;
   final n = v.abs();
-  final s = n.toStringAsFixed(0).replaceAllMapped(_thousands, (m) => '${m[1]},');
+  final s =
+      n.toStringAsFixed(0).replaceAllMapped(_thousands, (m) => '${m[1]},');
   final sign = signed && neg ? '-' : '';
   return '$sign৳ $s';
 }
@@ -73,81 +74,141 @@ class _Content extends StatelessWidget {
             .where((i) => i.kind == BillKind.charge)
             .fold<double>(0, (s, i) => s + (i.amount ?? 0));
 
-    final left = Stacked(children: [
-      _BalancePanel(d),
-      if (currentFee > 0) _InstallmentSection(fee: currentFee, term: currentTerm),
-    ]);
-    final right = Stacked(children: [
+    final waived = d.totalDiscount != null && d.totalDiscount != 0
+        ? d.totalDiscount!.abs()
+        : null;
+    final leftItems = <Widget>[
+      _BalanceHero(d),
+      StatStrip(items: [
+        StatBlock(
+          label: 'Total billed',
+          value: bdt(d.totalBilled),
+          numeric: d.totalBilled,
+          format: bdt,
+          hue: Hue.peach,
+        ),
+        StatBlock(
+          label: 'Total paid',
+          value: bdt(d.totalPaid),
+          secretId: d.totalPaid != null ? Secrets.totalPaid : null,
+          hue: Hue.mint,
+        ),
+        StatBlock(
+          label: 'Waived',
+          value: waived != null ? bdt(waived) : '—',
+          numeric: waived,
+          format: bdt,
+          hue: Hue.sky,
+        ),
+      ]),
+      if (currentFee > 0)
+        _InstallmentSection(fee: currentFee, term: currentTerm),
+    ];
+    final rightItems = <Widget>[
       if (d.paymentMethods.isNotEmpty) _PaymentMethodsSection(d.paymentMethods),
       const _HistoryLink(),
-    ]);
+    ];
 
-    return TwoColumn(left: left, right: right, ratio: 0.58);
+    return TwoColumn(
+      ratio: 0.58,
+      spacing: Spacing.xl,
+      left: Stacked(children: [
+        for (var i = 0; i < leftItems.length; i++)
+          Reveal(index: i, child: leftItems[i]),
+      ]),
+      right: Stacked(children: [
+        for (var i = 0; i < rightItems.length; i++)
+          Reveal(index: leftItems.length + i, child: rightItems[i]),
+      ]),
+    );
   }
 }
 
-/// The balance figure with the account totals beneath it.
-class _BalancePanel extends StatelessWidget {
+/// The focal block: the amount due (lemon) or a clear balance (mint), with an
+/// idly turning Expressive shape.
+class _BalanceHero extends StatelessWidget {
   final BillData d;
-  const _BalancePanel(this.d);
+  const _BalanceHero(this.d);
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final hasDue = d.hasDue;
     final balance = d.balance ?? 0;
-    final figureColor = hasDue ? p.warningInk : p.successInk;
+    final figureStyle = context.text.displaySmall
+        ?.copyWith(color: p.onContainer, fontFeatures: tabularFigures);
 
     return Panel(
+      hue: hasDue ? Hue.lemon : Hue.mint,
+      radius: Radii.xl,
       padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(Spacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(hasDue ? 'Amount due' : 'Current balance',
-                    style: context.text.labelMedium
-                        ?.copyWith(color: context.scheme.onSurfaceVariant)),
-                const SizedBox(height: Spacing.xs),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(hasDue ? bdt(balance) : 'Clear',
-                            style: context.text.displaySmall?.copyWith(
-                                color: figureColor,
-                                fontFeatures: tabularFigures)),
-                      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 168),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -22,
+              top: -22,
+              child: ExcludeSemantics(
+                child: IdleSpin(
+                  period: const Duration(seconds: 30),
+                  child: Container(
+                    width: 132,
+                    height: 132,
+                    decoration: ShapeDecoration(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      shape: const ExpressiveShapeBorder(
+                          ExpressiveShapeKind.cookie),
                     ),
-                    if (!hasDue && balance < 0) ...[
-                      const SizedBox(width: Spacing.sm),
-                      Text('${bdt(balance, signed: true)} advance',
-                          style: context.text.bodySmall),
-                    ],
-                  ],
+                  ),
                 ),
-              ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          StatStrip(bordered: false, items: [
-            StatBlock(label: 'Total billed', value: bdt(d.totalBilled)),
-            StatBlock(label: 'Total paid', value: bdt(d.totalPaid)),
-            StatBlock(
-                label: 'Waived',
-                value: d.totalDiscount != null && d.totalDiscount != 0
-                    ? bdt(d.totalDiscount!.abs())
-                    : '—'),
-          ]),
-        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  Spacing.xl, Spacing.xl, Spacing.xxl * 2, Spacing.xl),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(hasDue ? AppIcons.warning : AppIcons.success,
+                          size: 18, color: p.onContainer),
+                      const SizedBox(width: Spacing.sm),
+                      Flexible(
+                        child: Text(hasDue ? 'Amount due' : 'Current balance',
+                            style: context.text.labelLarge?.copyWith(
+                                color: p.onContainer.withValues(alpha: 0.8))),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Spacing.sm),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: hasDue
+                        ? CountUp(
+                            value: balance, format: bdt, style: figureStyle)
+                        : Text('Clear', style: figureStyle),
+                  ),
+                  if (!hasDue && balance < 0) ...[
+                    const SizedBox(height: Spacing.xs),
+                    Text('${bdt(balance, signed: true)} advance',
+                        style: context.text.bodyMedium
+                            ?.copyWith(color: p.onContainer)),
+                  ],
+                  const SizedBox(height: Spacing.md),
+                  StatusBadge(
+                    hasDue ? 'Pay on UCAM before the deadline' : 'Nothing owed',
+                    onColored: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -204,23 +265,26 @@ class _InstallmentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
+    final p = context.palette;
     final ordinal = ['1st', '2nd', '3rd'][inst.number - 1];
     final when = inst.dateLabel != null
         ? ' · by ${inst.dateLabel}'
         : ' · date set by UCAM';
+    const hues = [Hue.lemon, Hue.peach, Hue.mint];
     return ListRow(
       leading: Container(
-        width: 40,
-        height: 40,
+        width: 46,
+        height: 46,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(Radii.sm),
+          color: p.container(hues[(inst.number - 1) % hues.length]),
+          borderRadius: BorderRadius.circular(Radii.sm + 2),
         ),
         child: Text('${inst.cumulativePercent.toStringAsFixed(0)}%',
-            style: context.text.labelMedium
-                ?.copyWith(fontFeatures: tabularFigures)),
+            style: context.text.labelMedium?.copyWith(
+                color: p.onContainer,
+                fontWeight: FontWeight.w700,
+                fontFeatures: tabularFigures)),
       ),
       title: '$ordinal installment',
       subtitle: 'Pay up to ${bdt(inst.cumulativeAmount)} total$when',
@@ -275,10 +339,11 @@ class _HistoryLink extends StatelessWidget {
       children: [
         ListRow(
           icon: AppIcons.payments,
+          hue: Hue.sky,
           title: 'Payment history',
           subtitle: 'All bills and payments, by trimester',
-          onTap: () => Navigator.of(context)
-              .push(appRoute(const PaymentHistoryPage())),
+          onTap: () =>
+              Navigator.of(context).push(appRoute(const PaymentHistoryPage())),
         ),
       ],
     );

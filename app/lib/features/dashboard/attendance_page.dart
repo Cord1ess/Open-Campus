@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/domain/attendance_rules.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/course_names.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_widgets.dart';
 import 'models.dart';
@@ -46,6 +47,17 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   }
 }
 
+AttendanceBudget _budgetOf(CourseAttendance c) => attendanceBudget(
+    absences: c.absent,
+    isLab: isLabCourse(title: c.title, courseCode: c.courseCode));
+
+Hue _hueFor(StatusTone tone) => switch (tone) {
+      StatusTone.danger => Hue.rose,
+      StatusTone.warning => Hue.lemon,
+      StatusTone.success => Hue.mint,
+      _ => Hue.sky,
+    };
+
 class _AttendanceBody extends StatelessWidget {
   final AttendanceData data;
   final _Filter filter;
@@ -55,10 +67,6 @@ class _AttendanceBody extends StatelessWidget {
     required this.filter,
     required this.onFilter,
   });
-
-  AttendanceBudget _budgetOf(CourseAttendance c) => attendanceBudget(
-      absences: c.absent,
-      isLab: isLabCourse(title: c.title, courseCode: c.courseCode));
 
   @override
   Widget build(BuildContext context) {
@@ -94,59 +102,109 @@ class _AttendanceBody extends StatelessWidget {
       _Filter.strong => strong,
     };
 
+    final chart = Panel(
+      child: BarsChart(
+        maxY: 100,
+        threshold: (70, '70% min'),
+        items: [
+          for (final c in data.courses)
+            BarItem(
+              label: c.courseCode.isNotEmpty
+                  ? splitCourseLabel(c.courseCode).$1
+                  : c.title,
+              detail: c.title.isNotEmpty ? c.title : c.courseCode,
+              value: c.pct,
+              color: p.container(_hueFor(attendanceTone(c.pct, _budgetOf(c)))),
+            ),
+        ],
+      ),
+    );
+
+    final list = Section(
+      title: 'Courses',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FormWidth(
+            child: SegmentedControl<_Filter>(
+              value: filter,
+              onChanged: onFilter,
+              options: [
+                SegmentOption(_Filter.all, 'All ${courses.length}'),
+                SegmentOption(_Filter.atRisk, 'At risk ${atRisk.length}'),
+                SegmentOption(_Filter.strong, 'Strong ${strong.length}'),
+              ],
+            ),
+          ),
+          const SizedBox(height: Spacing.md),
+          AnimatedSize(
+            duration: Motion.medium,
+            curve: Motion.emphasized,
+            alignment: Alignment.topCenter,
+            child: AnimatedSwitcher(
+              duration: Motion.medium,
+              child: shown.isEmpty
+                  ? const EmptyState(
+                      key: ValueKey('empty'),
+                      icon: AppIcons.attendance,
+                      title: 'No courses in this filter',
+                      compact: true)
+                  : RowGroup(
+                      key: ValueKey(filter),
+                      children: [
+                        for (final c in shown) _CourseRow(c, _budgetOf(c)),
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Stacked(
       children: [
-        StatStrip(items: [
-          StatBlock(label: 'Present', value: '${overall.toStringAsFixed(0)}%'),
-          StatBlock(
-            label: 'Marks lost',
-            value: totalLost > 0 ? '−${_fmt(totalLost)}' : '0',
-            valueColor: totalLost > 0 ? p.dangerInk : p.successInk,
-          ),
-          StatBlock(
+        Reveal(
+          index: 0,
+          child: StatStrip(items: [
+            StatBlock(
+              label: 'Present',
+              value: '${overall.toStringAsFixed(0)}%',
+              numeric: overall,
+              format: (v) => '${v.toStringAsFixed(0)}%',
+              hue: overall < 70 ? Hue.rose : Hue.mint,
+            ),
+            StatBlock(
+              label: 'Marks lost',
+              value: totalLost > 0 ? '−${_fmt(totalLost)}' : '0',
+              numeric: totalLost,
+              format: (v) => v > 0 ? '−${_fmt(_quarter(v))}' : '0',
+              hue: totalLost > 0 ? Hue.rose : Hue.sky,
+            ),
+            StatBlock(
               label: 'Deducting',
               value: '$deducting',
-              note: 'of ${courses.length} courses'),
-          StatBlock(label: 'Classes', value: '$present/$held'),
-        ]),
-        Section(
-          title: 'Courses',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FormWidth(
-                child: SegmentedControl<_Filter>(
-                  value: filter,
-                  onChanged: onFilter,
-                  options: [
-                    SegmentOption(_Filter.all, 'All ${courses.length}'),
-                    SegmentOption(_Filter.atRisk, 'At risk ${atRisk.length}'),
-                    SegmentOption(_Filter.strong, 'Strong ${strong.length}'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: Spacing.md),
-              if (shown.isEmpty)
-                const EmptyState(
-                    icon: AppIcons.attendance,
-                    title: 'No courses in this filter',
-                    compact: true)
-              else
-                RowGroup(
-                  children: [
-                    for (final c in shown) _CourseRow(c, _budgetOf(c)),
-                  ],
-                ),
-            ],
-          ),
+              numeric: deducting.toDouble(),
+              format: (v) => v.toStringAsFixed(0),
+              note: 'of ${courses.length} courses',
+              hue: Hue.peach,
+            ),
+            StatBlock(
+                label: 'Classes', value: '$present/$held', hue: Hue.lavender),
+          ]),
         ),
+        Reveal(
+          index: 1,
+          child: Section(title: 'By course', child: chart),
+        ),
+        Reveal(index: 2, child: list),
       ],
     );
   }
 }
 
-/// One course: code + section, title, percentage, a thin presence bar coloured
-/// by its status, and a plain-language line about free absences / marks lost.
+/// One course: title (code and section below), percentage, an animated
+/// presence bar coloured by its status, and a plain-language line about free
+/// absences / marks lost.
 class _CourseRow extends StatelessWidget {
   final CourseAttendance c;
   final AttendanceBudget budget;
@@ -170,12 +228,9 @@ class _CourseRow extends StatelessWidget {
             : '${budget.freeRemaining} free absence'
                 '${budget.freeRemaining == 1 ? '' : 's'} left';
 
-    final code = c.courseCode.isNotEmpty ? c.courseCode : c.title;
-    final head = c.section.isNotEmpty ? '$code · ${c.section}' : code;
-
     return Padding(
       padding: const EdgeInsets.symmetric(
-          horizontal: Spacing.lg, vertical: Spacing.md),
+          horizontal: Spacing.lg + 4, vertical: Spacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -183,16 +238,11 @@ class _CourseRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(head, style: context.text.titleSmall),
-                    if (c.title.isNotEmpty && c.courseCode.isNotEmpty)
-                      Text(c.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.text.bodySmall),
-                  ],
+                child: CourseName(
+                  code: c.courseCode.isNotEmpty ? c.courseCode : c.title,
+                  title: c.title.isNotEmpty ? c.title : null,
+                  extra: c.section.isNotEmpty ? 'Sec ${c.section}' : null,
+                  titleStyle: context.text.titleSmall,
                 ),
               ),
               const SizedBox(width: Spacing.md),
@@ -200,21 +250,31 @@ class _CourseRow extends StatelessWidget {
                 const StatusBadge('Lab'),
                 const SizedBox(width: Spacing.sm),
               ],
-              Text('${c.pct.toStringAsFixed(0)}%',
-                  style: context.text.labelLarge?.copyWith(
-                      color: ink,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: tabularFigures)),
+              CountUp(
+                value: c.pct,
+                format: (v) => '${v.toStringAsFixed(0)}%',
+                style: context.text.titleMedium?.copyWith(
+                    color: ink,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: tabularFigures),
+              ),
             ],
           ),
           const SizedBox(height: Spacing.sm),
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: ratio,
-              minHeight: 6,
-              color: p.fillFor(tone, scheme),
-              backgroundColor: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(Radii.full),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: ratio),
+              duration: reduceMotion(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, __) => LinearProgressIndicator(
+                value: v,
+                minHeight: 8,
+                color: p.fillFor(tone, scheme),
+                backgroundColor: scheme.surfaceContainerHighest,
+              ),
             ),
           ),
           const SizedBox(height: Spacing.sm),
@@ -230,6 +290,9 @@ class _CourseRow extends StatelessWidget {
     );
   }
 }
+
+/// Round to the nearest quarter mark (for the count-up animation).
+double _quarter(double v) => (v * 4).round() / 4;
 
 /// Drop a trailing ".00" but keep ".25"/".50"/".75".
 String _fmt(double v) =>

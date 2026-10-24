@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/course_names.dart';
 import 'image_export.dart';
 import 'schedule_calendar.dart';
 import 'section_catalog_model.dart';
@@ -80,30 +81,33 @@ class _ScheduleDetailPageState extends State<ScheduleDetailPage> {
       body: Stacked(
         gap: Spacing.lg,
         children: [
-          _StatusHeader(c),
-          RepaintBoundary(
-            key: _calKey,
-            child: Panel(
-              padding: const EdgeInsets.all(Spacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    height: 460,
-                    child: ScheduleCalendarView(candidate: c),
-                  ),
-                  const SizedBox(height: Spacing.md),
-                  _Legend(courseOrder: courseOrder),
-                  const SizedBox(height: Spacing.xs),
-                  Text('Open Campus · ${widget.trimester ?? "schedule"}',
-                      style: context.text.labelSmall
-                          ?.copyWith(color: context.scheme.onSurfaceVariant)),
-                ],
+          Reveal(child: _StatusHeader(c)),
+          Reveal(
+            index: 1,
+            child: RepaintBoundary(
+              key: _calKey,
+              child: Panel(
+                padding: const EdgeInsets.all(Spacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: 460,
+                      child: ScheduleCalendarView(candidate: c),
+                    ),
+                    const SizedBox(height: Spacing.md),
+                    _Legend(courseOrder: courseOrder),
+                    const SizedBox(height: Spacing.xs),
+                    Text('Open Campus · ${widget.trimester ?? "schedule"}',
+                        style: context.text.labelSmall
+                            ?.copyWith(color: context.scheme.onSurfaceVariant)),
+                  ],
+                ),
               ),
             ),
           ),
           const SizedBox(height: Spacing.sm),
-          _ClassList(c),
+          Reveal(index: 2, child: _ClassList(c)),
           if (c.sacrifices.isNotEmpty)
             InfoNote(
               title: 'Trade-offs',
@@ -210,14 +214,13 @@ class _ClassRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(pick.courseName ?? pick.formalCode,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w500)),
-                    if (scheduled)
-                      Text(s.facultyName ?? s.facultyCode ?? 'Faculty TBA',
-                          style: context.text.bodySmall),
+                    CourseName(
+                      code: pick.formalCode,
+                      title: pick.courseName,
+                      extra: scheduled
+                          ? (s.facultyName ?? s.facultyCode ?? 'Faculty TBA')
+                          : null,
+                    ),
                   ],
                 ),
               ),

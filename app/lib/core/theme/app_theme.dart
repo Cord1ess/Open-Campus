@@ -704,8 +704,9 @@ class AppTheme {
     );
   }
 
-  /// Emphasized type scale in Google Sans Flex (rounded). Headlines are bold
-  /// and slightly tightened; body text is comfortable at 15/14 px.
+  /// Type scale in Google Sans Flex (sharp). Strong weight contrast: ExtraBold
+  /// display figures, Bold headlines, SemiBold titles, Regular body, Medium
+  /// labels; large sizes are tightened.
   static TextTheme _typography(ColorScheme scheme) {
     TextStyle s(double size, FontWeight w, double height,
             {Color? color, double spacing = 0}) =>
@@ -718,21 +719,21 @@ class AppTheme {
           color: color ?? scheme.onSurface,
         );
     return TextTheme(
-      displayLarge: s(52, FontWeight.w700, 1.05, spacing: -1),
-      displayMedium: s(44, FontWeight.w700, 1.05, spacing: -0.8),
-      displaySmall: s(36, FontWeight.w700, 1.1, spacing: -0.6),
-      headlineLarge: s(32, FontWeight.w700, 1.15, spacing: -0.5),
-      headlineMedium: s(28, FontWeight.w700, 1.15, spacing: -0.4),
-      headlineSmall: s(24, FontWeight.w700, 1.2, spacing: -0.3),
+      displayLarge: s(54, FontWeight.w800, 1.0, spacing: -1.6),
+      displayMedium: s(44, FontWeight.w800, 1.05, spacing: -1.2),
+      displaySmall: s(36, FontWeight.w800, 1.08, spacing: -0.9),
+      headlineLarge: s(32, FontWeight.w700, 1.12, spacing: -0.7),
+      headlineMedium: s(28, FontWeight.w700, 1.15, spacing: -0.5),
+      headlineSmall: s(23, FontWeight.w700, 1.2, spacing: -0.3),
       titleLarge: s(20, FontWeight.w600, 1.25, spacing: -0.2),
-      titleMedium: s(17, FontWeight.w600, 1.3),
-      titleSmall: s(15, FontWeight.w600, 1.3),
+      titleMedium: s(16.5, FontWeight.w600, 1.3, spacing: -0.1),
+      titleSmall: s(14.5, FontWeight.w600, 1.3),
       bodyLarge: s(16, FontWeight.w400, 1.45),
-      bodyMedium: s(15, FontWeight.w400, 1.45),
-      bodySmall: s(13, FontWeight.w400, 1.4, color: scheme.onSurfaceVariant),
-      labelLarge: s(15, FontWeight.w500, 1.3),
-      labelMedium: s(13, FontWeight.w500, 1.3),
-      labelSmall: s(12, FontWeight.w500, 1.3),
+      bodyMedium: s(14.5, FontWeight.w400, 1.45),
+      bodySmall: s(12.5, FontWeight.w400, 1.4, color: scheme.onSurfaceVariant),
+      labelLarge: s(14.5, FontWeight.w500, 1.3),
+      labelMedium: s(12.5, FontWeight.w500, 1.3, spacing: 0.1),
+      labelSmall: s(11.5, FontWeight.w600, 1.3, spacing: 0.3),
     );
   }
 }

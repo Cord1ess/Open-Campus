@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/course_names.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
 import '../dashboard/resource_view.dart';
@@ -31,8 +32,8 @@ String _weekdayName(int weekday) => const {
       DateTime.friday: 'Friday',
     }[weekday]!;
 
-String _sessionTitle(ClassSession s) =>
-    '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}';
+String? _section(ClassSession s) =>
+    s.section != null && s.section!.isNotEmpty ? 'Section ${s.section}' : null;
 
 String? _sessionTime(ClassSession s) =>
     s.start != null && s.end != null ? '${s.start} – ${s.end}' : null;
@@ -88,10 +89,13 @@ class _Content extends StatelessWidget {
 
     return Stacked(
       children: [
-        _NextClassPanel(routine),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _ExportButton(routine),
+        Reveal(index: 0, child: _NextClassPanel(routine)),
+        Reveal(
+          index: 1,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _ExportButton(routine),
+          ),
         ),
         ResponsiveGrid(
           maxColumns: 2,
@@ -99,11 +103,14 @@ class _Content extends StatelessWidget {
           spacing: Spacing.xl,
           runSpacing: Spacing.xl,
           children: [
-            for (final day in days)
-              _DayGroup(
-                day: day,
-                sessions: byDay[day]!,
-                isToday: day == todayName,
+            for (final (i, day) in days.indexed)
+              Reveal(
+                index: i + 2,
+                child: _DayGroup(
+                  day: day,
+                  sessions: byDay[day]!,
+                  isToday: day == todayName,
+                ),
               ),
           ],
         ),
@@ -112,8 +119,8 @@ class _Content extends StatelessWidget {
   }
 }
 
-/// Next class with a live countdown (or an "in class now" state). Only the
-/// countdown text listens to the per-second tick.
+/// The focal block: the next class (or the one in progress) with a live
+/// HH:MM:SS countdown. Only the countdown pill listens to the per-second tick.
 class _NextClassPanel extends StatefulWidget {
   final List<ClassSession> routine;
   const _NextClassPanel(this.routine);
@@ -167,72 +174,162 @@ class _NextClassPanelState extends State<_NextClassPanel>
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Panel(
-      child: ValueListenableBuilder<DateTime>(
-        valueListenable: _now,
-        builder: (context, now, _) {
-          final ongoing =
-              widget.routine.where((s) => isOngoing(s, now)).toList();
-          final next = nextClass(widget.routine, now);
-          if (ongoing.isNotEmpty) {
-            final s = ongoing.first;
-            return _body(context,
-                kicker: 'In class now',
-                title: _sessionTitle(s),
-                sub: _sessionTime(s),
-                trailing: const StatusBadge('Now', tone: StatusTone.success));
-          }
-          if (next != null) {
-            final s = next.session;
-            return _body(context,
-                kicker: 'Next class · ${_dayLabel(next.start, now)}',
-                title: _sessionTitle(s),
-                sub: _sessionTime(s),
-                trailing: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_fmtCountdown(next.start.difference(now)),
-                        style: context.text.titleLarge
-                            ?.copyWith(fontFeatures: tabularFigures)),
-                    Text('remaining', style: context.text.bodySmall),
-                  ],
-                ));
-          }
-          return _body(context,
-              kicker: 'Class routine',
-              title: 'No upcoming classes',
-              sub: null,
-              trailing: null);
-        },
+      hue: Hue.lavender,
+      radius: Radii.xl,
+      padding: EdgeInsets.zero,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 180),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -24,
+              top: -20,
+              child: ExcludeSemantics(
+                child: IdleSpin(
+                  period: const Duration(seconds: 30),
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: ShapeDecoration(
+                      color: p.container(Hue.peach),
+                      shape: const ExpressiveShapeBorder(
+                          ExpressiveShapeKind.cookie),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: 56,
+              bottom: -14,
+              child: ExcludeSemantics(
+                child: IdleSpin(
+                  period: const Duration(seconds: 20),
+                  reverse: true,
+                  bob: 3,
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: ShapeDecoration(
+                      color: p.container(Hue.sky),
+                      shape: const ExpressiveShapeBorder(
+                          ExpressiveShapeKind.clover),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  Spacing.xl, Spacing.xl, 96, Spacing.xl),
+              child: _content(context),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _body(BuildContext context,
-      {required String kicker,
-      required String title,
-      String? sub,
-      Widget? trailing}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+  Widget _content(BuildContext context) {
+    final p = context.palette;
+    final now = DateTime.now();
+    final ongoing = widget.routine.where((s) => isOngoing(s, now)).toList();
+    final next = nextClass(widget.routine, now);
+
+    ClassSession? session;
+    String kicker;
+    DateTime? target;
+    var live = false;
+    if (ongoing.isNotEmpty) {
+      session = ongoing.first;
+      kicker = 'In class now';
+      live = true;
+      final end = parseClock(session.end);
+      if (end != null) {
+        target = DateTime(now.year, now.month, now.day, end.$1, end.$2);
+      }
+    } else if (next != null) {
+      session = next.session;
+      kicker = 'Next class · ${_dayLabel(next.start, now)}';
+      target = next.start;
+    } else {
+      kicker = 'Class routine';
+    }
+
+    final titleStyle =
+        context.text.headlineSmall?.copyWith(color: p.onContainer);
+    final countdownTarget = target;
+    final extra = session == null
+        ? null
+        : [
+            if (_sessionTime(session) != null) _sessionTime(session)!,
+            if (_section(session) != null) _section(session)!,
+          ].join(' · ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(kicker,
-                  style: context.text.labelMedium
-                      ?.copyWith(color: context.scheme.onSurfaceVariant)),
-              const SizedBox(height: Spacing.xxs),
-              Text(title, style: context.text.titleMedium),
-              if (sub != null) Text(sub, style: context.text.bodySmall),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (live) ...[
+              LiveDot(color: p.onContainer, size: 7),
+              const SizedBox(width: 2),
             ],
-          ),
+            Flexible(
+              child: Text(kicker,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.labelLarge
+                      ?.copyWith(color: p.onContainer.withValues(alpha: 0.75))),
+            ),
+          ],
         ),
-        if (trailing != null) ...[
-          const SizedBox(width: Spacing.lg),
-          trailing,
+        const SizedBox(height: Spacing.sm),
+        if (session != null)
+          CourseName(
+            code: session.courseCode,
+            extra: extra,
+            color: p.onContainer,
+            titleStyle: titleStyle,
+            codeStyle: context.text.bodyMedium,
+          )
+        else
+          Text('No upcoming classes', style: titleStyle),
+        if (countdownTarget != null) ...[
+          const SizedBox(height: Spacing.lg),
+          ValueListenableBuilder<DateTime>(
+            valueListenable: _now,
+            builder: (context, t, _) => FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: Spacing.md, vertical: 6),
+                decoration: BoxDecoration(
+                  color: p.ink,
+                  borderRadius: BorderRadius.circular(Radii.full),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(AppIcons.time, size: 16, color: p.onInk),
+                    const SizedBox(width: 6),
+                    Text(live ? 'Ends in ' : 'Starts in ',
+                        style:
+                            context.text.labelMedium?.copyWith(color: p.onInk)),
+                    Text(_hms(countdownTarget.difference(t)),
+                        style: context.text.labelLarge?.copyWith(
+                            color: p.onInk,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: tabularFigures)),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ],
     );
@@ -242,22 +339,19 @@ class _NextClassPanelState extends State<_NextClassPanel>
     final today = DateTime(now.year, now.month, now.day);
     final d = DateTime(when.year, when.month, when.day);
     final diff = d.difference(today).inDays;
-    if (diff == 0) return 'today';
-    if (diff == 1) return 'tomorrow';
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Tomorrow';
     return _weekdayName(when.weekday);
   }
 
-  String _fmtCountdown(Duration d) {
-    if (d.inDays >= 1) {
-      return '${d.inDays}d ${d.inHours % 24}h';
-    }
-    final h = d.inHours;
-    final m = d.inMinutes % 60;
-    final s = d.inSeconds % 60;
-    if (h > 0) {
-      return '${h}h ${m.toString().padLeft(2, '0')}m';
-    }
-    return '${m}m ${s.toString().padLeft(2, '0')}s';
+  /// "HH:MM:SS", or "Xd HH:MM:SS" when a day or more away.
+  static String _hms(Duration d) {
+    if (d.isNegative) d = Duration.zero;
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours % 24, m = d.inMinutes % 60, s = d.inSeconds % 60;
+    return d.inDays > 0
+        ? '${d.inDays}d ${two(h)}:${two(m)}:${two(s)}'
+        : '${two(d.inHours)}:${two(m)}:${two(s)}';
   }
 }
 
@@ -334,7 +428,8 @@ class _DayGroup extends StatelessWidget {
   }
 }
 
-/// One class session row — also used by the home "Today" card.
+/// One class session row: course title (code and section below) with the time
+/// on the right; a live "Now" marker while the class is in progress.
 class ClassSessionRow extends StatelessWidget {
   final ClassSession s;
   final bool ongoing;
@@ -342,12 +437,53 @@ class ClassSessionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListRow(
-      title: _sessionTitle(s),
-      value: _sessionTime(s),
-      chevron: false,
-      trailing:
-          ongoing ? const StatusBadge('Now', tone: StatusTone.success) : null,
+    final p = context.palette;
+    final scheme = context.scheme;
+    final time = _sessionTime(s);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.lg + 4, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: CourseName(
+                code: s.courseCode,
+                extra: _section(s),
+                titleStyle: context.text.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: Spacing.md),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (ongoing)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LiveDot(color: p.successInk, size: 6),
+                        Text('Now',
+                            style: context.text.labelMedium?.copyWith(
+                                color: p.successInk,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  if (time != null)
+                    Text(time,
+                        textAlign: TextAlign.right,
+                        style: context.text.labelLarge?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontFeatures: tabularFigures)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

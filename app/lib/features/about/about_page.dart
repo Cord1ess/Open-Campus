@@ -18,10 +18,10 @@ class AboutPage extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 640),
           child: const Stacked(
             children: [
-              AppearanceSection(),
-              ServerStatusSection(),
-              StorageSection(),
-              AboutSection(),
+              Reveal(child: AppearanceSection()),
+              Reveal(index: 1, child: ServerStatusSection()),
+              Reveal(index: 2, child: StorageSection()),
+              Reveal(index: 3, child: AboutSection()),
             ],
           ),
         ),

@@ -46,7 +46,8 @@ class CalendarEvent {
   /// e.g. the Undergraduate and Graduate "Eid Holiday" — gets a DISTINCT id.
   /// Without it, both would collide: setting a reminder on one would toggle the
   /// other, and their scheduled notifications would overwrite each other.
-  factory CalendarEvent.fromJson(Map<String, dynamic> j, {String keyPrefix = ''}) {
+  factory CalendarEvent.fromJson(Map<String, dynamic> j,
+      {String keyPrefix = ''}) {
     final event = (j['event'] ?? '').toString();
     final start = _parseIso(j['start_date']) ?? DateTime(1970);
     return CalendarEvent(
@@ -89,25 +90,40 @@ CalendarEventType _inferType(String text) {
   final t = text.toLowerCase();
   // Short/ambiguous tokens use whole-word matching (_hasWord); unambiguous
   // longer phrases can stay as substrings.
-  if (t.contains('registration') || t.contains('advising') ||
-      t.contains('add/drop') || _hasWord(t, 'withdraw')) {
+  if (t.contains('registration') ||
+      t.contains('advising') ||
+      t.contains('add/drop') ||
+      _hasWord(t, 'withdraw')) {
     return CalendarEventType.registration;
   }
-  if (t.contains('payment') || t.contains('installment') ||
-      t.contains('instalment') || t.contains('tuition') ||
-      _hasWord(t, 'fee') || _hasWord(t, 'fees') || _hasWord(t, 'fine')) {
+  if (t.contains('payment') ||
+      t.contains('installment') ||
+      t.contains('instalment') ||
+      t.contains('tuition') ||
+      _hasWord(t, 'fee') ||
+      _hasWord(t, 'fees') ||
+      _hasWord(t, 'fine')) {
     return CalendarEventType.payment;
   }
-  if (_hasWord(t, 'exam') || t.contains('mid-term') || t.contains('midterm') ||
-      _hasWord(t, 'final') || t.contains('finals')) {
+  if (_hasWord(t, 'exam') ||
+      t.contains('mid-term') ||
+      t.contains('midterm') ||
+      _hasWord(t, 'final') ||
+      t.contains('finals')) {
     return CalendarEventType.exam;
   }
-  if (t.contains('holiday') || _hasWord(t, 'eid') || t.contains('closed') ||
-      t.contains('vacation') || t.contains('puja') || _hasWord(t, 'break')) {
+  if (t.contains('holiday') ||
+      _hasWord(t, 'eid') ||
+      t.contains('closed') ||
+      t.contains('vacation') ||
+      t.contains('puja') ||
+      _hasWord(t, 'break')) {
     return CalendarEventType.holiday;
   }
-  if (t.contains('semester begin') || t.contains('classes begin') ||
-      t.contains('class resume') || _hasWord(t, 'class') ||
+  if (t.contains('semester begin') ||
+      t.contains('classes begin') ||
+      t.contains('class resume') ||
+      _hasWord(t, 'class') ||
       _hasWord(t, 'classes')) {
     return CalendarEventType.classDay;
   }
@@ -143,8 +159,8 @@ class AcademicCalendar {
       revised: j['revised'] == true,
       events: ((j['events'] as List?) ?? const [])
           .whereType<Map>()
-          .map((e) =>
-              CalendarEvent.fromJson(e.cast<String, dynamic>(), keyPrefix: keyPrefix))
+          .map((e) => CalendarEvent.fromJson(e.cast<String, dynamic>(),
+              keyPrefix: keyPrefix))
           .toList()
         ..sort((a, b) => a.date.compareTo(b.date)),
     );

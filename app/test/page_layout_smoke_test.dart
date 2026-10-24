@@ -393,7 +393,17 @@ void main() {
     expect(find.text('Your classes today'), findsOneWidget);
     expect(find.text('Upcoming'), findsOneWidget);
     expect(find.text('CGPA'), findsOneWidget);
-    expect(find.text('3.67'), findsWidgets);
+    // CGPA is hidden until the eye toggle is pressed.
+    expect(find.text('3.67'), findsNothing);
+    expect(find.text('••••'), findsOneWidget);
+    final eye = find.byIcon(Icons.visibility_outlined).first;
+    // Centre it: the floating nav bar covers the bottom edge of the screen.
+    await tester.runAsync(() => Scrollable.ensureVisible(tester.element(eye),
+        alignment: 0.5));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(eye);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('3.67'), findsOneWidget);
     // Cached home data surfaces the freshness line.
     expect(find.textContaining('Saved copy'), findsOneWidget);
   });

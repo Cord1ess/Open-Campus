@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +12,7 @@ import '../academics/calendar_page.dart';
 import '../academics/class_routine_page.dart';
 import '../academics/routine_schedule.dart';
 import '../auth/auth_controller.dart';
+import '../common/course_names.dart';
 import '../finance/bill_page.dart';
 import '../profile/profile_page.dart';
 import 'attendance_page.dart';
@@ -36,11 +39,27 @@ String _bdt(double? v) {
 }
 
 const _weekdays = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday'
 ];
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
 ];
 
 String _dayName(DateTime d) => _weekdays[d.weekday - 1];
@@ -59,16 +78,6 @@ String _relativeDay(int days) {
   return 'In $days days';
 }
 
-String _until(Duration d) {
-  if (d.inMinutes < 1) return 'starting now';
-  if (d.inHours < 1) return 'in ${d.inMinutes} min';
-  if (d.inDays < 1) {
-    final m = d.inMinutes % 60;
-    return 'in ${d.inHours}h${m > 0 ? ' ${m}m' : ''}';
-  }
-  return 'in ${d.inDays} day${d.inDays == 1 ? '' : 's'}';
-}
-
 /// Sessions for a weekday name, sorted by start time.
 List<ClassSession> _sessionsOn(HomeSummary? home, String day) {
   final list = (home?.routine ?? const <ClassSession>[])
@@ -78,10 +87,18 @@ List<ClassSession> _sessionsOn(HomeSummary? home, String day) {
     final c = parseClock(s.start);
     return c == null ? 9999 : c.$1 * 60 + c.$2;
   }
+
   return list..sort((a, b) => key(a).compareTo(key(b)));
 }
 
-const _classHues = [Hue.peach, Hue.sky, Hue.pink, Hue.mint, Hue.lemon, Hue.lavender];
+const _classHues = [
+  Hue.peach,
+  Hue.sky,
+  Hue.pink,
+  Hue.mint,
+  Hue.lemon,
+  Hue.lavender
+];
 
 /// Home: greeting, the next class as the focal block, this week's days, the
 /// selected day's classes as colour cards, headline figures, payment, upcoming
@@ -123,7 +140,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final results = ref.watch(resultsProvider);
     final attendance = ref.watch(attendanceProvider);
     final auth = ref.watch(authControllerProvider);
-    final roll = auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : null;
+    final roll =
+        auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : null;
 
     // Centralized token-expiry handling: a 401 from ANY core provider means
     // our token died — log out once (logout() is idempotent).
@@ -170,9 +188,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           icon: AppIcons.refresh,
           tooltip: 'Reload data',
           onPressed: _refreshing ? null : _refresh,
-          child: _refreshing
-              ? const ExpressiveLoader(size: 20)
-              : null,
+          child: _refreshing ? const ExpressiveLoader(size: 20) : null,
         ),
       ],
       onRefresh: _refresh,
@@ -190,11 +206,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             TwoColumn(
               ratio: 0.58,
               spacing: Spacing.xl,
-              left: Stacked(children: left),
-              right: Stacked(children: right),
+              left: Stacked(children: [
+                for (var i = 0; i < left.length; i++)
+                  Reveal(index: i, child: left[i]),
+              ]),
+              right: Stacked(children: [
+                for (var i = 0; i < right.length; i++)
+                  Reveal(index: i + 1, child: right[i]),
+              ]),
             )
           else
-            Stacked(children: [...left, ...right]),
+            Stacked(children: [
+              for (final (i, w) in [...left, ...right].indexed)
+                Reveal(index: i, child: w),
+            ]),
         ],
       ),
     );
@@ -253,53 +278,116 @@ class _Header extends ConsumerWidget {
 // Next class hero
 // ---------------------------------------------------------------------------
 
-class _NextClassHero extends StatelessWidget {
+class _NextClassHero extends ConsumerStatefulWidget {
   final HomeSummary? home;
   const _NextClassHero({required this.home});
 
   @override
+  ConsumerState<_NextClassHero> createState() => _NextClassHeroState();
+}
+
+class _NextClassHeroState extends ConsumerState<_NextClassHero>
+    with WidgetsBindingObserver {
+  Timer? _ticker;
+  // Only the countdown text listens to this, so the card itself doesn't
+  // rebuild every second.
+  final _now = ValueNotifier<DateTime>(DateTime.now());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _start();
+  }
+
+  void _start() {
+    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) _now.value = DateTime.now();
+    });
+  }
+
+  void _stop() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _now.value = DateTime.now();
+      _start();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stop();
+    _now.dispose();
+    super.dispose();
+  }
+
+  static String _hms(Duration d) {
+    if (d.isNegative) d = Duration.zero;
+    String two(int n) => n.toString().padLeft(2, '0');
+    final days = d.inDays;
+    final h = d.inHours % 24, m = d.inMinutes % 60, s = d.inSeconds % 60;
+    return days > 0
+        ? '${days}d ${two(h)}:${two(m)}:${two(s)}'
+        : '${two(d.inHours)}:${two(m)}:${two(s)}';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final home = widget.home;
     final routine = home?.routine ?? const <ClassSession>[];
     final now = DateTime.now();
     final ongoing = routine.where((s) => isOngoing(s, now)).toList();
     final next = nextClass(routine, now);
 
     String kicker;
-    String title;
+    ClassSession? session;
+    String? fallbackTitle;
     String? detail;
-    String? badge;
+    DateTime? target;
+    var live = false;
     if (home == null) {
       kicker = 'Getting your day ready';
-      title = 'Loading…';
+      fallbackTitle = 'Loading…';
     } else if (ongoing.isNotEmpty) {
-      final s = ongoing.first;
+      session = ongoing.first;
       kicker = 'In class now';
-      title = s.courseCode;
-      detail = [
-        if (s.start != null && s.end != null) '${s.start} – ${s.end}',
-        if (s.section != null) 'Section ${s.section}',
-      ].join(' · ');
-      badge = 'Now';
+      live = true;
+      final end = parseClock(session.end);
+      if (end != null) {
+        target = DateTime(now.year, now.month, now.day, end.$1, end.$2);
+      }
     } else if (next != null) {
-      final s = next.session;
+      session = next.session;
       final d = _daysUntil(next.start);
-      kicker = 'Next class · ${d == 0 ? 'Today' : d == 1 ? 'Tomorrow' : _dayName(next.start)}';
-      title = s.courseCode;
-      detail = [
-        if (s.start != null && s.end != null) '${s.start} – ${s.end}',
-        if (s.section != null) 'Section ${s.section}',
-      ].join(' · ');
-      badge = 'Starts ${_until(next.start.difference(now))}';
+      kicker =
+          'Next class · ${d == 0 ? 'Today' : d == 1 ? 'Tomorrow' : _dayName(next.start)}';
+      target = next.start;
     } else {
-      final term = home?.currentTerm?.name ?? home?.currentTerm?.code;
+      final term = home.currentTerm?.name ?? home.currentTerm?.code;
       kicker = 'This term';
-      title = term ?? 'No classes scheduled';
-      detail = home?.cgpa != null
-          ? 'CGPA ${home!.cgpa!.toStringAsFixed(2)}'
-          : null;
+      fallbackTitle = term ?? 'No classes scheduled';
+    }
+    if (session != null) {
+      detail = [
+        if (session.start != null && session.end != null)
+          '${session.start} – ${session.end}',
+        if (session.section != null) 'Section ${session.section}',
+      ].join(' · ');
     }
 
+    final titleStyle =
+        context.text.headlineSmall?.copyWith(color: p.onContainer);
+    final countdownTarget = target;
     return Panel(
       hue: Hue.lavender,
       radius: Radii.xl,
@@ -307,44 +395,79 @@ class _NextClassHero extends StatelessWidget {
       onTap: () =>
           Navigator.of(context).push(appRoute(const ClassRoutinePage())),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 188),
+        constraints: const BoxConstraints(minHeight: 196),
         child: Stack(
           children: [
-            // Expressive shape cluster (brand peach + sky + white).
-            Positioned(
-              right: -18,
-              top: 18,
-              child: _ShapeCluster(),
-            ),
+            const Positioned(right: -18, top: 18, child: _ShapeCluster()),
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  Spacing.xl, Spacing.xl, 132, Spacing.xl),
+                  Spacing.xl, Spacing.xl, 128, Spacing.xl),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(kicker,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.text.labelLarge?.copyWith(
-                          color: p.onContainer.withValues(alpha: 0.75))),
-                  const SizedBox(height: Spacing.xs),
-                  Text(title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.text.headlineMedium
-                          ?.copyWith(color: p.onContainer)),
-                  if (detail != null && detail.isNotEmpty) ...[
-                    const SizedBox(height: Spacing.xs),
-                    Text(detail,
-                        maxLines: 1,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (live) ...[
+                        LiveDot(color: p.onContainer, size: 7),
+                        const SizedBox(width: 2),
+                      ],
+                      Flexible(
+                        child: Text(kicker,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.text.labelLarge?.copyWith(
+                                color: p.onContainer.withValues(alpha: 0.75))),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Spacing.sm),
+                  if (session != null)
+                    CourseName(
+                      code: session.courseCode,
+                      extra: detail,
+                      color: p.onContainer,
+                      titleStyle: titleStyle,
+                      codeStyle: context.text.bodyMedium,
+                    )
+                  else
+                    Text(fallbackTitle ?? '',
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: context.text.bodyMedium
-                            ?.copyWith(color: p.onContainer)),
-                  ],
-                  if (badge != null) ...[
+                        style: titleStyle),
+                  if (countdownTarget != null) ...[
                     const SizedBox(height: Spacing.lg),
-                    StatusBadge(badge, onColored: true),
+                    ValueListenableBuilder<DateTime>(
+                      valueListenable: _now,
+                      builder: (context, t, _) => FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: Spacing.md, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: p.ink,
+                            borderRadius: BorderRadius.circular(Radii.full),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(AppIcons.time, size: 16, color: p.onInk),
+                              const SizedBox(width: 6),
+                              Text(live ? 'Ends in ' : 'Starts in ',
+                                  style: context.text.labelMedium
+                                      ?.copyWith(color: p.onInk)),
+                              Text(_hms(countdownTarget.difference(t)),
+                                  style: context.text.labelLarge?.copyWith(
+                                      color: p.onInk,
+                                      fontWeight: FontWeight.w700,
+                                      fontFeatures: tabularFigures)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -357,6 +480,8 @@ class _NextClassHero extends StatelessWidget {
 }
 
 class _ShapeCluster extends StatelessWidget {
+  const _ShapeCluster();
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -369,39 +494,61 @@ class _ShapeCluster extends StatelessWidget {
             Positioned(
               right: 0,
               top: 0,
-              child: Container(
+              child: SizedBox(
                 width: 104,
                 height: 104,
-                decoration: ShapeDecoration(
-                  color: p.accent,
-                  shape: const ExpressiveShapeBorder(ExpressiveShapeKind.cookie),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IdleSpin(
+                      period: const Duration(seconds: 28),
+                      child: Container(
+                        width: 104,
+                        height: 104,
+                        decoration: ShapeDecoration(
+                          color: p.accent,
+                          shape: const ExpressiveShapeBorder(
+                              ExpressiveShapeKind.cookie),
+                        ),
+                      ),
+                    ),
+                    Icon(AppIcons.course, size: 40, color: p.onAccent),
+                  ],
                 ),
-                child: Icon(AppIcons.course,
-                    size: 40, color: p.onAccent),
               ),
             ),
             Positioned(
               left: 8,
               bottom: 8,
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: ShapeDecoration(
-                  color: p.container(Hue.sky),
-                  shape: const ExpressiveShapeBorder(ExpressiveShapeKind.clover,
-                      rotation: 0.4),
+              child: IdleSpin(
+                period: const Duration(seconds: 18),
+                reverse: true,
+                bob: 3,
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: ShapeDecoration(
+                    color: p.container(Hue.sky),
+                    shape: const ExpressiveShapeBorder(
+                        ExpressiveShapeKind.clover,
+                        rotation: 0.4),
+                  ),
                 ),
               ),
             ),
             Positioned(
               right: 30,
               bottom: 0,
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
+              child: IdleSpin(
+                period: const Duration(seconds: 6),
+                bob: 4,
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             ),
@@ -484,7 +631,8 @@ class _DayChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final fg = selected ? onInk : scheme.onSurface;
-    final sub = selected ? onInk.withValues(alpha: 0.75) : scheme.onSurfaceVariant;
+    final sub =
+        selected ? onInk.withValues(alpha: 0.75) : scheme.onSurfaceVariant;
     return Semantics(
       button: true,
       selected: selected,
@@ -513,7 +661,9 @@ class _DayChip extends StatelessWidget {
                   width: 5,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: hasClasses ? (selected ? onInk : ink) : Colors.transparent,
+                    color: hasClasses
+                        ? (selected ? onInk : ink)
+                        : Colors.transparent,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -678,15 +828,30 @@ class _ClassCard extends StatelessWidget {
             children: [
               if (s.section != null)
                 StatusBadge('Sec ${s.section}', onColored: true),
-              if (live) const StatusBadge('Now', onColored: true),
+              if (live)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(4, 2, 10, 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(Radii.full),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    LiveDot(color: p.onContainer, size: 6),
+                    Text('Now',
+                        style: context.text.labelMedium?.copyWith(
+                            color: p.onContainer, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
             ],
           ),
           SizedBox(height: tall ? Spacing.lg : Spacing.md),
-          Text(s.courseCode,
-              maxLines: tall ? 3 : 2,
-              overflow: TextOverflow.ellipsis,
-              style: (tall ? context.text.titleLarge : context.text.titleMedium)
-                  ?.copyWith(color: p.onContainer)),
+          CourseName(
+            code: s.courseCode,
+            maxLines: tall ? 3 : 2,
+            color: p.onContainer,
+            titleStyle:
+                tall ? context.text.titleLarge : context.text.titleMedium,
+          ),
           if (tall) const Spacer() else const SizedBox(height: Spacing.sm),
           if (time != null)
             Text(time,
@@ -729,18 +894,23 @@ class _Figures extends StatelessWidget {
         StatBlock(
           label: 'CGPA',
           value: cgpa?.toStringAsFixed(2) ?? '—',
+          secretId: cgpa != null ? Secrets.cgpa : null,
           hue: Hue.mint,
           onTap: () => go(const ResultsPage()),
         ),
         StatBlock(
           label: 'Attendance',
           value: att != null ? '${att.toStringAsFixed(0)}%' : '—',
+          numeric: att,
+          format: (v) => '${v.toStringAsFixed(0)}%',
           hue: att != null && att < 70 ? Hue.rose : Hue.sky,
           onTap: () => go(const AttendancePage()),
         ),
         StatBlock(
           label: 'Credits',
           value: credits?.toStringAsFixed(0) ?? '—',
+          numeric: credits,
+          format: (v) => v.toStringAsFixed(0),
           hue: Hue.peach,
           onTap: () => go(const ResultsPage()),
         ),
@@ -767,8 +937,7 @@ class _PaymentSection extends ConsumerWidget {
     final days = next != null ? _daysUntil(next.deadline) : null;
     final deadlineSoon = days != null && days <= 14;
 
-    void openBill() =>
-        Navigator.of(context).push(appRoute(const BillPage()));
+    void openBill() => Navigator.of(context).push(appRoute(const BillPage()));
 
     if (home == null) return const SizedBox.shrink();
 
@@ -818,16 +987,15 @@ class _PaymentSection extends ConsumerWidget {
           ),
           const SizedBox(height: Spacing.md),
           Text(hasDue ? 'Amount due' : 'Next installment',
-              style: context.text.labelMedium?.copyWith(
-                  color: p.onContainer.withValues(alpha: 0.75))),
+              style: context.text.labelMedium
+                  ?.copyWith(color: p.onContainer.withValues(alpha: 0.75))),
           Text(hasDue ? _bdt(home!.dueAmount) : (next?.dateText ?? '—'),
               style: context.text.headlineMedium?.copyWith(
                   color: p.onContainer, fontFeatures: tabularFigures)),
           if (next != null && hasDue) ...[
             const SizedBox(height: Spacing.xs),
             Text('${next.ordinalLabel} installment · ${next.dateText}',
-                style:
-                    context.text.bodySmall?.copyWith(color: p.onContainer)),
+                style: context.text.bodySmall?.copyWith(color: p.onContainer)),
           ],
           const SizedBox(height: Spacing.lg),
           FilledButton(
@@ -904,8 +1072,7 @@ class _UpcomingSection extends ConsumerWidget {
       body = const LoadingState(verticalPadding: Spacing.lg);
     } else if (async.hasError) {
       body = const InfoNote(
-          icon: AppIcons.offline,
-          text: 'Couldn’t load the academic calendar.');
+          icon: AppIcons.offline, text: 'Couldn’t load the academic calendar.');
     } else if (events.isEmpty) {
       body = const InfoNote(text: 'No upcoming events.');
     } else {

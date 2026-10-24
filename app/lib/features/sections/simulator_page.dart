@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
 import '../academics/advising_model.dart';
+import '../common/course_names.dart';
 import 'schedule_detail_page.dart';
 import 'section_catalog_model.dart';
 import 'section_widgets.dart';
@@ -136,15 +137,23 @@ class _SimulatorPageState extends State<SimulatorPage> {
             ),
       body: Stacked(
         children: [
-          if (prefs == null)
-            selector
-          else
-            TwoColumn(left: selector, right: prefs, ratio: 0.45),
-          if (_results != null)
-            _ResultsSection(
-              results: _results!,
-              trimester: widget.catalog.trimester,
-            ),
+          Reveal(
+            child: prefs == null
+                ? selector
+                : TwoColumn(left: selector, right: prefs, ratio: 0.45),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _results == null
+                ? const SizedBox(width: double.infinity)
+                : Reveal(
+                    key: ValueKey(_results),
+                    child: _ResultsSection(
+                      results: _results!,
+                      trimester: widget.catalog.trimester,
+                    ),
+                  ),
+          ),
           // Room so the FAB never covers the last result.
           const SizedBox(height: Spacing.xxl),
         ],
@@ -189,8 +198,7 @@ class _CourseSelector extends StatelessWidget {
                 for (final c in selected.values)
                   ListRow(
                     title: c.name ?? c.formalCode,
-                    subtitle:
-                        '${c.formalCode} · ${c.sections.length} sections',
+                    subtitle: '${c.formalCode} · ${c.sections.length} sections',
                     chevron: false,
                     trailing: IconButton(
                       icon: const Icon(AppIcons.clear, size: 18),
@@ -256,7 +264,8 @@ class _CoursePickerSheetState extends State<_CoursePickerSheet> {
             (c.name?.toUpperCase().contains(query) ?? false) ||
             c.formalCode.toUpperCase().contains(query))
         .toList()
-      ..sort((a, b) => (a.name ?? a.formalCode).compareTo(b.name ?? b.formalCode));
+      ..sort(
+          (a, b) => (a.name ?? a.formalCode).compareTo(b.name ?? b.formalCode));
 
     return Padding(
       padding: EdgeInsets.only(
@@ -379,11 +388,7 @@ class _CourseFacultyPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(course.name ?? course.formalCode,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: context.text.titleSmall),
-        Text(course.formalCode, style: context.text.bodySmall),
+        CourseName(code: course.formalCode, title: course.name),
         const SizedBox(height: Spacing.sm),
         Wrap(
           spacing: Spacing.sm,
@@ -673,11 +678,8 @@ class _PickLine extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(pick.courseName ?? pick.formalCode,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: context.text.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w500)),
+          CourseName(code: pick.formalCode, title: pick.courseName),
+          const SizedBox(height: Spacing.xxs),
           Text(
             unscheduled
                 ? 'No section fits your constraints'

@@ -22,7 +22,8 @@ class AvoidBlock {
   final String day;
   final int startMin; // minutes since midnight
   final int endMin;
-  const AvoidBlock({required this.day, required this.startMin, required this.endMin});
+  const AvoidBlock(
+      {required this.day, required this.startMin, required this.endMin});
 
   bool blocks(ScheduleSlot slot) {
     if (slot.day != day) return false;
@@ -165,9 +166,7 @@ class SimulatorEngine {
     // Per-course candidate sections (avoid-filtered, preference-ordered).
     final perCourse = <_CourseCandidates>[];
     for (final w in wanted) {
-      final usable = w.course.sections
-          .where((s) => !_hitsAvoid(s))
-          .toList()
+      final usable = w.course.sections.where((s) => !_hitsAvoid(s)).toList()
         ..sort((a, b) => _sectionCost(w, a).compareTo(_sectionCost(w, b)));
       perCourse.add(_CourseCandidates(w, usable));
     }
@@ -189,8 +188,8 @@ class SimulatorEngine {
     _visits = 0;
     _seen.clear();
     final clean = <ScheduleCandidate>[];
-    _search(perCourse, 0, <_Assigned>[], clean, allowConflicts: false,
-        stopAt: target);
+    _search(perCourse, 0, <_Assigned>[], clean,
+        allowConflicts: false, stopAt: target);
 
     if (clean.isNotEmpty) {
       clean.sort((a, b) => a.score.compareTo(b.score));
@@ -203,8 +202,8 @@ class SimulatorEngine {
     _visits = 0;
     _seen.clear();
     final any = <ScheduleCandidate>[];
-    _search(perCourse, 0, <_Assigned>[], any, allowConflicts: true,
-        stopAt: target);
+    _search(perCourse, 0, <_Assigned>[], any,
+        allowConflicts: true, stopAt: target);
     any.sort((a, b) {
       if (a.conflictFree != b.conflictFree) return a.conflictFree ? -1 : 1;
       return a.score.compareTo(b.score);
@@ -327,9 +326,9 @@ class SimulatorEngine {
       // Prefer the human course name in messages; fall back to the code.
       final label = w.course.name ?? w.formalCode;
       if (s == null) {
-        sacrifices.add(
-            'No section of $label fits your constraints — try relaxing a '
-            'day-block or time window.');
+        sacrifices
+            .add('No section of $label fits your constraints — try relaxing a '
+                'day-block or time window.');
         score += prefs.wFacultyMiss * 10; // heavy — a course went unscheduled
         picks.add(PickedSection(
             formalCode: w.formalCode,
@@ -347,22 +346,26 @@ class SimulatorEngine {
       score += _sectionCost(w, s);
       // A readable faculty name, never a bare "?".
       final facLabel = s.facultyName ?? s.facultyCode ?? 'the assigned faculty';
-      final secLabel = s.section != null ? 'section ${s.section}' : 'this section';
+      final secLabel =
+          s.section != null ? 'section ${s.section}' : 'this section';
       if (missed) {
-        sacrifices.add(
-            'For $label, none of your preferred faculty were free — '
+        sacrifices.add('For $label, none of your preferred faculty were free — '
             'this uses $facLabel instead.');
       } else if (rank != null && rank > 0) {
-        final ordinal = rank == 1 ? '2nd' : rank == 2 ? '3rd' : '${rank + 1}th';
-        sacrifices.add(
-            'For $label, your top faculty wasn\'t free — this uses your '
-            '$ordinal choice, $facLabel.');
+        final ordinal = rank == 1
+            ? '2nd'
+            : rank == 2
+                ? '3rd'
+                : '${rank + 1}th';
+        sacrifices
+            .add('For $label, your top faculty wasn\'t free — this uses your '
+                '$ordinal choice, $facLabel.');
       }
       if (prefs.timeWindow != null) {
         final v = prefs.timeWindow!.violations(s);
         if (v > 0) {
-          sacrifices.add(
-              'For $label, $secLabel falls outside your preferred hours.');
+          sacrifices
+              .add('For $label, $secLabel falls outside your preferred hours.');
         }
       }
       picks.add(PickedSection(
@@ -398,10 +401,8 @@ class SimulatorEngine {
   }
 
   bool _hasInternalConflict(List<_Assigned> chosen) {
-    final secs = chosen
-        .map((a) => a.section)
-        .whereType<CatalogSection>()
-        .toList();
+    final secs =
+        chosen.map((a) => a.section).whereType<CatalogSection>().toList();
     for (var i = 0; i < secs.length; i++) {
       for (var j = i + 1; j < secs.length; j++) {
         if (secs[i].conflictsWith(secs[j])) return true;

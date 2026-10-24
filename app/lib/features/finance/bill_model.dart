@@ -34,7 +34,8 @@ DateTime? _parseBillDate(String? raw) {
   if (s.isEmpty) return null;
 
   // 1) DD-MMM-YY(YY) with a month NAME.
-  var m = RegExp(r'^(\d{1,2})[-/\s]([A-Za-z]{3,})[-/\s](\d{2,4})$').firstMatch(s);
+  var m =
+      RegExp(r'^(\d{1,2})[-/\s]([A-Za-z]{3,})[-/\s](\d{2,4})$').firstMatch(s);
   if (m != null) {
     final day = int.tryParse(m.group(1)!);
     final month = _monthByAbbr[m.group(2)!.toLowerCase()];
@@ -47,8 +48,8 @@ DateTime? _parseBillDate(String? raw) {
   // 2) ISO YYYY-MM-DD.
   m = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$').firstMatch(s);
   if (m != null) {
-    return _safeDate(int.parse(m.group(1)!), int.parse(m.group(2)!),
-        int.parse(m.group(3)!));
+    return _safeDate(
+        int.parse(m.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!));
   }
   // 3) Numeric DD-MM-YY(YY) (day first, as UCAM is BD-locale).
   m = RegExp(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$').firstMatch(s);
@@ -251,7 +252,8 @@ class BillData {
   /// real term name.
   static const paymentsBucket = 'Payments';
 
-  bool _hasTerm(BillItem i) => i.trimester != null && i.trimester!.trim().isNotEmpty;
+  bool _hasTerm(BillItem i) =>
+      i.trimester != null && i.trimester!.trim().isNotEmpty;
 
   Map<String, List<BillItem>> get statementByTrimester {
     if (items.isEmpty) return {};
@@ -294,9 +296,8 @@ class BillData {
     for (final e in ascending) {
       final i = e.item;
       if (_hasTerm(i) && !i.isPayment) current = i.trimester!.trim();
-      final key = _hasTerm(i)
-          ? i.trimester!.trim()
-          : (current ?? paymentsBucket);
+      final key =
+          _hasTerm(i) ? i.trimester!.trim() : (current ?? paymentsBucket);
       (assigned[key] ??= []).add(i);
     }
 
@@ -343,7 +344,10 @@ class BillData {
     final terms = <String>[];
     for (final i in items) {
       final t = i.trimester?.trim();
-      if (t != null && t.isNotEmpty && t != paymentsBucket && !terms.contains(t)) {
+      if (t != null &&
+          t.isNotEmpty &&
+          t != paymentsBucket &&
+          !terms.contains(t)) {
         terms.add(t);
       }
     }

@@ -21,36 +21,50 @@ class ExamRoutinePage extends ConsumerWidget {
       body: Stacked(
         gap: Spacing.lg,
         children: [
-          Text(
-            'UIU publishes exam routines per program. Open the one that '
-            'matches your program.',
-            style: context.text.bodyMedium
-                ?.copyWith(color: context.scheme.onSurfaceVariant),
-          ),
-          state.when(
-            loading: () => const LoadingState(label: 'Loading exam routines…'),
-            error: (e, _) => ErrorState(
-              title: 'Couldn’t load exam routines',
-              message: '$e',
-              onRetry: () => ref.invalidate(examRoutineProvider),
+          const Reveal(
+            child: InfoNote(
+              tone: StatusTone.info,
+              icon: AppIcons.exams,
+              title: 'Published by UIU',
+              text: 'UIU publishes exam routines per program. Open the one '
+                  'that matches your program.',
             ),
-            data: (d) => d.routines.isEmpty
-                ? const EmptyState(
-                    icon: AppIcons.exams,
-                    title: 'No exam routine published',
-                    message: 'Check back once UIU publishes this term’s routine.',
-                  )
-                : RowGroup(
-                    children: [
-                      for (final r in d.routines)
-                        ListRow(
-                          icon: AppIcons.exams,
-                          title: r.label,
-                          external: true,
-                          onTap: () => _open(context, r),
-                        ),
-                    ],
-                  ),
+          ),
+          Reveal(
+            index: 1,
+            child: state.when(
+              loading: () =>
+                  const LoadingState(label: 'Loading exam routines…'),
+              error: (e, _) => ErrorState(
+                title: 'Couldn’t load exam routines',
+                message: '$e',
+                onRetry: () => ref.invalidate(examRoutineProvider),
+              ),
+              data: (d) => d.routines.isEmpty
+                  ? const EmptyState(
+                      icon: AppIcons.exams,
+                      title: 'No exam routine published',
+                      message:
+                          'Check back once UIU publishes this term’s routine.',
+                    )
+                  : RowGroup(
+                      children: [
+                        for (final (i, r) in d.routines.indexed)
+                          ListRow(
+                            icon: AppIcons.exams,
+                            hue: const [
+                              Hue.rose,
+                              Hue.peach,
+                              Hue.lemon,
+                              Hue.lavender
+                            ][i % 4],
+                            title: r.label,
+                            external: true,
+                            onTap: () => _open(context, r),
+                          ),
+                      ],
+                    ),
+            ),
           ),
         ],
       ),

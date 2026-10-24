@@ -10,6 +10,7 @@ enum ToolMode { auto, manual }
 /// Auto / Manual segmented control at the top, then the active mode's content.
 class ToolScaffold extends StatefulWidget {
   final String title;
+
   /// Builds the body for a given mode. Called on every mode switch.
   final Widget Function(BuildContext, ToolMode) builder;
   final ToolMode initial;
@@ -50,9 +51,20 @@ class _ToolScaffoldState extends State<ToolScaffold> {
             ),
           ),
           const SizedBox(height: Spacing.xl),
-          KeyedSubtree(
-            key: ValueKey(_mode),
-            child: widget.builder(context, _mode),
+          // Cross-fade between Auto and Manual; each body staggers its own
+          // sections in with Reveal.
+          AnimatedSwitcher(
+            duration: Motion.medium,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (current, previous) => Stack(
+              alignment: Alignment.topCenter,
+              children: [...previous, if (current != null) current],
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(_mode),
+              child: widget.builder(context, _mode),
+            ),
           ),
         ],
       ),

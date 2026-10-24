@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/course_names.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/resource_view.dart';
 import 'course_history_model.dart';
@@ -30,7 +31,8 @@ class _CourseHistoryPageState extends ConsumerState<CourseHistoryPage> {
     final state = ref.watch(courseHistoryProvider);
     return PageScaffold(
       title: 'Course Grades',
-      onRefresh: () => ref.read(courseHistoryProvider.notifier).load(force: true),
+      onRefresh: () =>
+          ref.read(courseHistoryProvider.notifier).load(force: true),
       body: ResourceBody<CourseHistoryData>(
         state: state,
         loadingLabel: 'Loading your course history…',
@@ -54,6 +56,7 @@ class _Content extends StatelessWidget {
       final m = RegExp(r'\d+').firstMatch(t);
       return m != null ? (int.tryParse(m.group(0)!) ?? -1) : -1;
     }
+
     final groups = d.byTrimester.entries.toList()
       ..sort((x, y) => code(y.key).compareTo(code(x.key)));
     final gpaByTrimester = {
@@ -63,20 +66,55 @@ class _Content extends StatelessWidget {
       return const EmptyState(
           icon: AppIcons.grades, title: 'No course history yet');
     }
+    // Term GPA / CGPA trend, oldest first.
+    final terms = [
+      for (final g in d.trimesterGpas)
+        if (g.trimester != null && (g.gpa != null || g.cgpa != null)) g,
+    ]..sort((x, y) => code(x.trimester!).compareTo(code(y.trimester!)));
+    final p = context.palette;
+
     return Stacked(
       children: [
-        _StandingPanel(d),
+        Reveal(index: 0, child: _StandingFigures(d)),
+        Reveal(index: 1, child: _StandingPanel(d)),
+        if (terms.length >= 2)
+          Reveal(
+            index: 2,
+            child: Section(
+              title: 'GPA by term',
+              child: Panel(
+                child: TrendChart(
+                  labels: [for (final t in terms) t.trimester!],
+                  series: [
+                    ChartSeries(
+                      name: 'GPA',
+                      color: p.infoInk,
+                      values: [for (final t in terms) t.gpa],
+                    ),
+                    ChartSeries(
+                      name: 'CGPA',
+                      color: p.accent,
+                      values: [for (final t in terms) t.cgpa],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ResponsiveGrid(
           maxColumns: 2,
           stretch: false,
           spacing: Spacing.xl,
           runSpacing: Spacing.xl,
           children: [
-            for (final entry in groups)
-              _TrimesterGroup(
-                trimester: entry.key,
-                courses: entry.value,
-                gpa: gpaByTrimester[entry.key],
+            for (final (i, entry) in groups.indexed)
+              Reveal(
+                index: i + 3,
+                child: _TrimesterGroup(
+                  trimester: entry.key,
+                  courses: entry.value,
+                  gpa: gpaByTrimester[entry.key],
+                ),
               ),
           ],
         ),
@@ -85,7 +123,71 @@ class _Content extends StatelessWidget {
   }
 }
 
-/// Program, degree progress ring, and the headline figures.
+const _kMaxTrimesters = 12;
+
+double? _remaining(CourseHistoryData d) =>
+    (d.degreeRequirement != null && d.completedCredits != null)
+        ? (d.degreeRequirement! - d.completedCredits!)
+            .clamp(0, d.degreeRequirement!)
+            .toDouble()
+        : null;
+
+/// Pace to graduate within 12 trimesters: remaining credits ÷ remaining
+/// trimesters (trimesters used = rows in the transcript GPA table).
+int _remainingTrimesters(CourseHistoryData d) =>
+    (_kMaxTrimesters - d.trimesterGpas.length).clamp(1, _kMaxTrimesters);
+
+double _avgPerTrimester(CourseHistoryData d) {
+  final r = _remaining(d);
+  return (r != null && r > 0) ? r / _remainingTrimesters(d) : 0.0;
+}
+
+/// The focal pastel figures: CGPA (hidden by default), credits done/left and
+/// the pace needed to finish on time.
+class _StandingFigures extends StatelessWidget {
+  final CourseHistoryData d;
+  const _StandingFigures(this.d);
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = _remaining(d);
+    final avg = _avgPerTrimester(d);
+    return StatStrip(items: [
+      StatBlock(
+        label: 'CGPA',
+        value: d.cgpa?.toStringAsFixed(2) ?? '—',
+        secretId: d.cgpa != null ? Secrets.cgpa : null,
+        hue: Hue.mint,
+      ),
+      StatBlock(
+        label: 'Completed',
+        value: d.completedCredits != null
+            ? '${d.completedCredits!.toStringAsFixed(0)} cr'
+            : '—',
+        numeric: d.completedCredits,
+        format: (v) => '${v.toStringAsFixed(0)} cr',
+        hue: Hue.sky,
+      ),
+      StatBlock(
+        label: 'Remaining',
+        value: remaining != null ? '${remaining.toStringAsFixed(0)} cr' : '—',
+        numeric: remaining,
+        format: (v) => '${v.toStringAsFixed(0)} cr',
+        hue: Hue.peach,
+      ),
+      StatBlock(
+        label: 'Credits / term',
+        note: 'to finish on time',
+        value: avg > 0 ? avg.toStringAsFixed(1) : '—',
+        numeric: avg > 0 ? avg : null,
+        format: (v) => v.toStringAsFixed(1),
+        hue: Hue.lavender,
+      ),
+    ]);
+  }
+}
+
+/// Program, degree progress ring, and the credit details.
 class _StandingPanel extends StatelessWidget {
   final CourseHistoryData d;
   const _StandingPanel(this.d);
@@ -94,23 +196,12 @@ class _StandingPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final p = context.palette;
-    final remaining = (d.degreeRequirement != null && d.completedCredits != null)
-        ? (d.degreeRequirement! - d.completedCredits!)
-            .clamp(0, d.degreeRequirement!)
-            .toDouble()
-        : null;
+    final remainingTrimesters = _remainingTrimesters(d);
+    final avgPerTrimester = _avgPerTrimester(d);
+    const kMaxTrimesters = _kMaxTrimesters;
 
-    // Pace to graduate within 12 trimesters: remaining credits ÷ remaining
-    // trimesters (trimesters used = rows in the transcript GPA table).
-    const kMaxTrimesters = 12;
-    final trimestersUsed = d.trimesterGpas.length;
-    final remainingTrimesters =
-        (kMaxTrimesters - trimestersUsed).clamp(1, kMaxTrimesters);
-    final avgPerTrimester = (remaining != null && remaining > 0)
-        ? remaining / remainingTrimesters
-        : 0.0;
-
-    final hasHeader = d.program != null || d.batch != null || d.probation != null;
+    final hasHeader =
+        d.program != null || d.batch != null || d.probation != null;
 
     return Panel(
       child: Column(
@@ -144,47 +235,45 @@ class _StandingPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
-                width: 64,
-                height: 64,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      value: d.progress.clamp(0.0, 1.0).toDouble(),
-                      strokeWidth: 6,
-                      color: p.accentInk,
-                      backgroundColor: scheme.surfaceContainerHighest,
-                      strokeCap: StrokeCap.round,
-                    ),
-                    Text('${(d.progress * 100).toStringAsFixed(0)}%',
-                        style: context.text.labelLarge
-                            ?.copyWith(fontFeatures: tabularFigures)),
-                  ],
+                width: 72,
+                height: 72,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(
+                      begin: 0, end: d.progress.clamp(0.0, 1.0).toDouble()),
+                  duration: reduceMotion(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 1100),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, v, __) => Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox.expand(
+                        child: CircularProgressIndicator(
+                          value: v,
+                          strokeWidth: 7,
+                          color: p.accent,
+                          backgroundColor: scheme.surfaceContainerHighest,
+                          strokeCap: StrokeCap.round,
+                        ),
+                      ),
+                      Text('${(v * 100).toStringAsFixed(0)}%',
+                          style: context.text.titleSmall
+                              ?.copyWith(fontFeatures: tabularFigures)),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: Spacing.lg),
               Expanded(
-                child: StatStrip(
-                  bordered: false,
-                  items: [
-                    StatBlock(
-                        label: 'CGPA', value: d.cgpa?.toStringAsFixed(2) ?? '—'),
-                    StatBlock(
-                        label: 'Completed',
-                        value: d.completedCredits != null
-                            ? '${d.completedCredits!.toStringAsFixed(0)} cr'
-                            : '—'),
-                    StatBlock(
-                        label: 'Remaining',
-                        value: remaining != null
-                            ? '${remaining.toStringAsFixed(0)} cr'
-                            : '—'),
-                    StatBlock(
-                        label: 'Credits / term',
-                        note: 'to finish on time',
-                        value: avgPerTrimester > 0
-                            ? avgPerTrimester.toStringAsFixed(1)
-                            : '—'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Degree progress', style: context.text.titleMedium),
+                    Text(
+                        '${d.completedCredits?.toStringAsFixed(0) ?? '—'} of '
+                        '${d.degreeRequirement?.toStringAsFixed(0) ?? '—'} '
+                        'credits completed',
+                        style: context.text.bodySmall),
                   ],
                 ),
               ),
@@ -266,23 +355,33 @@ class _CourseRow extends StatelessWidget {
     final cr = c.credit != null
         ? '${c.credit!.toStringAsFixed(c.credit! % 1 == 0 ? 0 : 1)} cr'
         : null;
-    return ListRow(
-      title: c.courseCode ?? '—',
-      subtitle: c.courseName,
-      value: cr,
-      chevron: false,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!c.isRunning && c.point != null) ...[
-            Text(c.point!.toStringAsFixed(2),
-                style: context.text.labelMedium?.copyWith(
-                    color: context.scheme.onSurfaceVariant,
-                    fontFeatures: tabularFigures)),
-            const SizedBox(width: Spacing.sm),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.lg + 4, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: CourseName(
+                code: c.courseCode ?? '—',
+                title: c.courseName,
+                extra: cr,
+                titleStyle: context.text.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: Spacing.md),
+            if (!c.isRunning && c.point != null) ...[
+              Text(c.point!.toStringAsFixed(2),
+                  style: context.text.labelMedium?.copyWith(
+                      color: context.scheme.onSurfaceVariant,
+                      fontFeatures: tabularFigures)),
+              const SizedBox(width: Spacing.sm),
+            ],
+            _gradeBadge(c),
           ],
-          _gradeBadge(c),
-        ],
+        ),
       ),
     );
   }

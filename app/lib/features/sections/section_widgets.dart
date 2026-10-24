@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
+import '../common/course_names.dart';
 import 'section_catalog_model.dart';
-
-/// Seat capacity glyph (not in AppIcons; local to the sections feature).
 
 /// Short day label, e.g. "Saturday" -> "Sat".
 String shortDay(String day) => day.length >= 3 ? day.substring(0, 3) : day;
@@ -40,42 +39,52 @@ class CourseSectionsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final sections = course.sections;
     final facultyCount = course.facultyByCode.length;
-    final meta = course.credits != null
-        ? '${course.formalCode} · ${_credits(course.credits!)} credit'
-            '${course.credits == 1 ? "" : "s"}'
-        : course.formalCode;
+    final credits = course.credits != null
+        ? '${_credits(course.credits!)} credit${course.credits == 1 ? "" : "s"}'
+        : null;
 
-    return Section(
-      title: course.name ?? course.formalCode,
-      trailing: Text('${sections.length} section${sections.length == 1 ? "" : "s"}'
-          ' · $facultyCount faculty'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: Spacing.sm),
-            child: Text(meta, style: context.text.bodySmall),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: Spacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: CourseName(
+                  code: course.formalCode,
+                  title: course.name,
+                  extra: credits,
+                  titleStyle: context.text.titleLarge,
+                ),
+              ),
+              const SizedBox(width: Spacing.md),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child:
+                    StatusBadge('${sections.length} sec · $facultyCount fac'),
+              ),
+            ],
           ),
-          if (sections.isEmpty)
-            Text('No sections listed for this course.',
-                style: context.text.bodySmall)
-          else
-            RowGroup(
-              children: [
-                for (final s in sections)
-                  SectionRow(
-                    section: s,
-                    selected: selectedSection != null &&
-                        s.section == selectedSection,
-                    onTap: onPickSection == null
-                        ? null
-                        : () => onPickSection!(s),
-                  ),
-              ],
-            ),
-        ],
-      ),
+        ),
+        if (sections.isEmpty)
+          Text('No sections listed for this course.',
+              style: context.text.bodySmall)
+        else
+          RowGroup(
+            children: [
+              for (final s in sections)
+                SectionRow(
+                  section: s,
+                  selected:
+                      selectedSection != null && s.section == selectedSection,
+                  onTap: onPickSection == null ? null : () => onPickSection!(s),
+                ),
+            ],
+          ),
+      ],
     );
   }
 }
@@ -133,8 +142,8 @@ class SectionRow extends StatelessWidget {
     );
 
     return ListRow(
-      leading: StatusBadge('Sec ${section.section ?? '?'}',
-          tone: StatusTone.accent),
+      leading:
+          StatusBadge('Sec ${section.section ?? '?'}', tone: StatusTone.accent),
       title: section.facultyName ?? section.facultyCode ?? 'TBA',
       subtitle: sub,
       trailing: trailing,

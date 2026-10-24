@@ -44,7 +44,9 @@ DateTime? nextOccurrence(ClassSession s, DateTime from) {
   var candidate = DateTime(from.year, from.month, from.day, hm.$1, hm.$2)
       .add(Duration(days: add));
   // If it's today's weekday but the time already passed, jump a week.
-  if (candidate.isBefore(from)) candidate = candidate.add(const Duration(days: 7));
+  if (candidate.isBefore(from)) {
+    candidate = candidate.add(const Duration(days: 7));
+  }
   return candidate;
 }
 
@@ -161,7 +163,8 @@ String routineIcs(
     final end = endHm != null
         ? DateTime(start.year, start.month, start.day, endHm.$1, endHm.$2)
         : start.add(const Duration(hours: 1));
-    final title = '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}';
+    final title =
+        '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}';
     lines
       ..add('BEGIN:VEVENT')
       ..add('UID:routine-${n++}-${s.courseCode}@opencampus')

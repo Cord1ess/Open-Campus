@@ -27,14 +27,16 @@ class ComingSoonPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PageScaffold(
       title: title,
-      body: EmptyState(
-        icon: icon,
-        title: 'Not available in Open Campus yet',
-        message:
-            'This feature is still only on the UCAM portal. You can open it there.',
-        actionLabel: 'Open UCAM',
-        actionIcon: AppIcons.external,
-        onAction: () => openUcam(context),
+      body: Reveal(
+        child: EmptyState(
+          icon: icon,
+          title: 'Not available in Open Campus yet',
+          message:
+              'This feature is still only on the UCAM portal. You can open it there.',
+          actionLabel: 'Open UCAM',
+          actionIcon: AppIcons.external,
+          onAction: () => openUcam(context),
+        ),
       ),
     );
   }

@@ -227,8 +227,8 @@ class _PlannerCardState extends State<PlannerCard> {
           ),
           const SizedBox(height: Spacing.sm),
           AddCourseButton(
-            onTap: () => setState(() => _courses.add(
-                PlannedCourse(label: 'Course ${_courses.length + 1}', credit: 3))),
+            onTap: () => setState(() => _courses.add(PlannedCourse(
+                label: 'Course ${_courses.length + 1}', credit: 3))),
           ),
         ],
       ),
@@ -242,7 +242,10 @@ class CourseInputRow extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback? onRemove;
   const CourseInputRow(
-      {super.key, required this.course, required this.onChanged, this.onRemove});
+      {super.key,
+      required this.course,
+      required this.onChanged,
+      this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +287,8 @@ class CourseInputRow extends StatelessWidget {
 class CreditStepper extends StatelessWidget {
   final double credit;
   final ValueChanged<double> onChanged;
-  const CreditStepper({super.key, required this.credit, required this.onChanged});
+  const CreditStepper(
+      {super.key, required this.credit, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -558,7 +562,8 @@ class _TargetPlannerBody extends StatelessWidget {
         tone: StatusTone.warning,
         icon: AppIcons.warning,
         title: 'Out of reach next trimester',
-        text: 'You’d need ${plan.requiredGpa.toStringAsFixed(2)} GPA — above 4.00. '
+        text:
+            'You’d need ${plan.requiredGpa.toStringAsFixed(2)} GPA — above 4.00. '
             'The most you can reach next trimester is '
             '${plan.maxReachableCgpa.toStringAsFixed(2)}. Spread it over more trimesters.',
       );

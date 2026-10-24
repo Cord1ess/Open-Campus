@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/theme/motion.dart';
 import 'responsive.dart';
+import 'secret_value.dart';
 
 /// A labelled figure. Inside a [StatStrip] it renders as a pastel tile; on its
 /// own (or in a borderless strip) it is a plain label-over-value block.
+///
+/// [secretId] hides the value behind an eye toggle (see [SecretText]).
+/// [numeric] + [format] animate the value counting up.
 class StatBlock extends StatelessWidget {
   final String label;
   final String value;
@@ -13,10 +18,10 @@ class StatBlock extends StatelessWidget {
   final bool large;
   final CrossAxisAlignment align;
   final VoidCallback? onTap;
-
-  /// Tile colour when shown in a tiled [StatStrip]. Defaults to the strip's
-  /// rotation, or to the semantic hue implied by [valueColor].
   final Hue? hue;
+  final String? secretId;
+  final double? numeric;
+  final String Function(double v)? format;
 
   const StatBlock({
     super.key,
@@ -28,6 +33,9 @@ class StatBlock extends StatelessWidget {
     this.align = CrossAxisAlignment.start,
     this.onTap,
     this.hue,
+    this.secretId,
+    this.numeric,
+    this.format,
   });
 
   Widget _content(BuildContext context, {required bool onTile}) {
@@ -36,6 +44,36 @@ class StatBlock extends StatelessWidget {
     final labelColor =
         onTile ? p.onContainer.withValues(alpha: 0.72) : scheme.onSurfaceVariant;
     final vColor = onTile ? p.onContainer : (valueColor ?? scheme.onSurface);
+    final style = (large
+            ? context.text.headlineMedium
+            : context.text.headlineSmall)
+        ?.copyWith(
+            color: vColor,
+            fontWeight: FontWeight.w800,
+            fontFeatures: tabularFigures);
+
+    // Fixed line box: FittedBox reports its child's unscaled height, which
+    // under IntrinsicHeight overflowed the tile by a couple of pixels. Pinning
+    // the height to the scaled line height makes the measurement exact.
+    final fs = style?.fontSize ?? 22;
+    final lineH =
+        MediaQuery.textScalerOf(context).scale(fs) * (style?.height ?? 1.2) + 2;
+
+    Widget valueWidget;
+    if (secretId != null) {
+      valueWidget = SecretText(
+        id: secretId!,
+        value: value,
+        style: style,
+        iconColor: vColor,
+        iconSize: large ? 22 : 18,
+      );
+    } else if (numeric != null && format != null) {
+      valueWidget = CountUp(value: numeric!, format: format!, style: style);
+    } else {
+      valueWidget = Text(value, maxLines: 1, style: style);
+    }
+
     return Column(
       crossAxisAlignment: align,
       mainAxisSize: MainAxisSize.min,
@@ -45,17 +83,15 @@ class StatBlock extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: context.text.labelMedium?.copyWith(color: labelColor)),
         const SizedBox(height: Spacing.xs),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: align == CrossAxisAlignment.end
-              ? Alignment.centerRight
-              : Alignment.centerLeft,
-          child: Text(value,
-              maxLines: 1,
-              style: (large
-                      ? context.text.headlineMedium
-                      : context.text.headlineSmall)
-                  ?.copyWith(color: vColor, fontFeatures: tabularFigures)),
+        SizedBox(
+          height: lineH,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: align == CrossAxisAlignment.end
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+            child: valueWidget,
+          ),
         ),
         if (note != null) ...[
           const SizedBox(height: Spacing.xxs),
@@ -80,9 +116,9 @@ class StatBlock extends StatelessWidget {
   }
 }
 
-/// A row of figures. Tiled (default): each figure is a pastel colour tile, like
-/// the Expressive stat cards. [bordered] false: plain figures in a row, for use
-/// inside a card. Wraps to two per row on phones with more than three items.
+/// A row of figures. Tiled (default): each figure is a pastel colour tile.
+/// [bordered] false: plain figures in a row, for use inside a card. Wraps to
+/// two per row on phones with more than three items.
 class StatStrip extends StatelessWidget {
   final List<StatBlock> items;
   final bool bordered;
@@ -131,11 +167,13 @@ class StatStrip extends StatelessWidget {
         child: b._content(context, onTile: true),
       );
       if (b.onTap == null) return tile;
-      return Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(Radii.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(onTap: b.onTap, child: tile),
+      return PressScale(
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(Radii.md),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(onTap: b.onTap, child: tile),
+        ),
       );
     }
 

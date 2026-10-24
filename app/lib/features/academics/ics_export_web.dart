@@ -19,11 +19,10 @@ Future<bool> saveOrOpenIcs(String ics, String filename) async {
       web.BlobPropertyBag(type: 'text/calendar;charset=utf-8'),
     );
     final url = web.URL.createObjectURL(blob);
-    final anchor =
-        web.document.createElement('a') as web.HTMLAnchorElement
-          ..href = url
-          ..download = filename
-          ..style.display = 'none';
+    final anchor = web.document.createElement('a') as web.HTMLAnchorElement
+      ..href = url
+      ..download = filename
+      ..style.display = 'none';
     web.document.body?.append(anchor);
     anchor.click();
     anchor.remove();

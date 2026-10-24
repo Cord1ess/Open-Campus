@@ -145,7 +145,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                     child: FilledButton.icon(
                       onPressed: () {
                         Navigator.of(sheetCtx).pop();
-                        _open(GoogleCalendar.eventUrl(e, calendarName: calName));
+                        _open(
+                            GoogleCalendar.eventUrl(e, calendarName: calName));
                       },
                       icon: const Icon(AppIcons.calendar, size: 18),
                       label: const Text('Add to Google Calendar'),
@@ -210,6 +211,44 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
     final wide = Breakpoints.isExpanded(context);
 
+    // Focal figures: how many events are ahead, how soon the next one is, and
+    // how many reminders are set in this calendar.
+    final nextDays = upcoming.isEmpty
+        ? null
+        : DateTime(upcoming.first.date.year, upcoming.first.date.month,
+                upcoming.first.date.day)
+            .difference(DateTime(
+                DateTime.now().year, DateTime.now().month, DateTime.now().day))
+            .inDays;
+    final reminderCount =
+        cal.events.where((e) => _reminders.contains(e.id)).length;
+    final figures = StatStrip(items: [
+      StatBlock(
+        label: 'Upcoming',
+        value: '${upcoming.length}',
+        numeric: upcoming.length.toDouble(),
+        format: (v) => v.toStringAsFixed(0),
+        hue: Hue.lavender,
+      ),
+      StatBlock(
+        label: 'Next event',
+        value: nextDays == null
+            ? '—'
+            : nextDays <= 0
+                ? 'Today'
+                : nextDays == 1
+                    ? 'Tomorrow'
+                    : 'In $nextDays d',
+        note: upcoming.isEmpty ? null : upcoming.first.title,
+        hue: Hue.peach,
+      ),
+      StatBlock(
+        label: 'Reminders',
+        value: '$reminderCount',
+        hue: Hue.mint,
+      ),
+    ]);
+
     final picker = _CalendarPicker(
       calendars: cals,
       selected: idx,
@@ -255,7 +294,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         title: _title,
         body: Stacked(
           children: [
-            controls,
+            Reveal(child: figures),
+            Reveal(index: 1, child: controls),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -272,14 +312,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 const SizedBox(width: Spacing.xl),
                 Expanded(
                   flex: 2,
-                  child: _DetailPanel(
-                    event: _selectedEvent,
-                    reminderOn: _selectedEvent != null &&
-                        _reminders.contains(_selectedEvent!.id),
-                    onToggleReminder: (on) => _toggle(_selectedEvent!, on),
-                    onAddToGoogle: () => _open(GoogleCalendar.eventUrl(
-                        _selectedEvent!,
-                        calendarName: calName)),
+                  child: AnimatedSwitcher(
+                    duration: Motion.medium,
+                    child: _DetailPanel(
+                      key: ValueKey(_selectedEvent?.id),
+                      event: _selectedEvent,
+                      reminderOn: _selectedEvent != null &&
+                          _reminders.contains(_selectedEvent!.id),
+                      onToggleReminder: (on) => _toggle(_selectedEvent!, on),
+                      onAddToGoogle: () => _open(GoogleCalendar.eventUrl(
+                          _selectedEvent!,
+                          calendarName: calName)),
+                    ),
                   ),
                 ),
               ],
@@ -293,7 +337,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     return PageScaffold(
       title: _title,
       slivers: [
-        SliverToBoxAdapter(child: controls),
+        SliverToBoxAdapter(child: Reveal(child: figures)),
+        const SliverToBoxAdapter(child: SizedBox(height: Spacing.xl)),
+        SliverToBoxAdapter(child: Reveal(index: 1, child: controls)),
         SliverList.builder(
           itemCount: rows.length,
           itemBuilder: (context, i) => _rowWidget(rows, i, calName),
@@ -316,17 +362,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final e = row.event!;
     final wide = Breakpoints.isExpanded(context);
     final prevIsEvent = i > 0 && rows[i - 1].event != null;
+    final nextIsEvent = i + 1 < rows.length && rows[i + 1].event != null;
     final selected = wide && _selectedEvent?.id == e.id;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (prevIsEvent) const Divider(height: 1),
-        ColoredBox(
-          color: selected
-              ? context.palette.accentTint
-              : Colors.transparent,
-          child: ListRow(
-            leading: _DateColumn(e.date, muted: row.past),
+    // Consecutive events read as one white rounded card: round the first and
+    // last row of each run.
+    const r = Radius.circular(Radii.lg);
+    final radius = BorderRadius.vertical(
+      top: prevIsEvent ? Radius.zero : r,
+      bottom: nextIsEvent ? Radius.zero : r,
+    );
+    final tile = Material(
+      color: selected ? context.palette.accentTint : context.scheme.surface,
+      borderRadius: radius,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (prevIsEvent)
+            const Divider(
+                height: 1, indent: Spacing.lg + 4, endIndent: Spacing.lg + 4),
+          ListRow(
+            leading: _DateTile(e, muted: row.past),
             title: e.title,
             subtitle: _subtitle(e),
             muted: row.past,
@@ -343,9 +399,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               }
             },
           ),
-        ),
-      ],
+        ],
+      ),
     );
+    return Reveal(index: i.clamp(0, 10) + 2, child: tile);
   }
 }
 
@@ -401,32 +458,61 @@ class _CalendarPicker extends StatelessWidget {
   }
 }
 
-/// Day number over month, 44 wide — the row's leading date column.
-class _DateColumn extends StatelessWidget {
-  final DateTime date;
+/// Pastel date tile (day over month), coloured by the event type: exams rose,
+/// payments lemon, holidays mint, registration peach, class days sky.
+class _DateTile extends StatelessWidget {
+  final CalendarEvent e;
   final bool muted;
-  const _DateColumn(this.date, {this.muted = false});
+  const _DateTile(this.e, {this.muted = false});
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
   ];
+
+  static Hue hueFor(CalendarEventType t) => switch (t) {
+        CalendarEventType.exam => Hue.rose,
+        CalendarEventType.payment => Hue.lemon,
+        CalendarEventType.holiday => Hue.mint,
+        CalendarEventType.registration => Hue.peach,
+        CalendarEventType.classDay => Hue.sky,
+        CalendarEventType.other => Hue.lavender,
+      };
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final scheme = context.scheme;
-    return SizedBox(
-      width: 44,
+    final bg =
+        muted ? scheme.surfaceContainerHigh : p.container(hueFor(e.type));
+    final fg = muted ? scheme.onSurfaceVariant : p.onContainer;
+    return Container(
+      width: 48,
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(Radii.sm + 2),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('${date.day}',
-              style: context.text.titleSmall?.copyWith(
-                  color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
-                  fontFeatures: tabularFigures)),
-          Text(_months[date.month - 1],
-              style: context.text.labelSmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          Text('${e.date.day}',
+              style: context.text.titleMedium?.copyWith(
+                  color: fg, height: 1.05, fontFeatures: tabularFigures)),
+          Text(_months[e.date.month - 1],
+              style: context.text.labelSmall?.copyWith(color: fg)),
         ],
       ),
     );
@@ -443,7 +529,7 @@ class _EventHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _DateColumn(e.date),
+        _DateTile(e),
         const SizedBox(width: Spacing.md),
         Expanded(
           child: Column(
@@ -468,6 +554,7 @@ class _DetailPanel extends StatelessWidget {
   final ValueChanged<bool> onToggleReminder;
   final VoidCallback onAddToGoogle;
   const _DetailPanel({
+    super.key,
     required this.event,
     required this.reminderOn,
     required this.onToggleReminder,

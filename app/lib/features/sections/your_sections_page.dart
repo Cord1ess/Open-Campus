@@ -61,9 +61,8 @@ class _YourSectionsPageState extends ConsumerState<YourSectionsPage> {
             ref.read(sectionCatalogProvider.notifier).load(force: true),
         builder: (catalog) => _Content(
           catalog: catalog,
-          advising: advState is ResData<AdvisingData>
-              ? advState.loaded.data
-              : null,
+          advising:
+              advState is ResData<AdvisingData> ? advState.loaded.data : null,
           advisingLoading: advState is ResLoading<AdvisingData>,
           showAll: _showAll,
           search: _search,
@@ -178,22 +177,21 @@ class _Content extends StatelessWidget {
           ),
         ),
         const SizedBox(height: Spacing.xs),
-        if (showAll)
-          _AllCoursesBrowser(catalog: catalog, query: query)
-        else if (advisingLoading && myCourses.isEmpty)
-          const LoadingState(label: 'Loading your pre-advised courses…')
-        else if (noPreAdvise)
-          EmptyState(
-            icon: AppIcons.advising,
-            title: 'No pre-advised courses yet',
-            message:
-                'Pre-advise your courses on UCAM first (mark them Taken). '
-                'They’ll show here with their sections. Or browse all courses.',
-            actionLabel: 'Browse all courses',
-            onAction: () => onToggleShowAll(true),
-          )
-        else
-          _MyCoursesList(myCourses: myCourses, query: query),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: KeyedSubtree(
+            key: ValueKey('$showAll|$query'),
+            child: showAll
+                ? _AllCoursesBrowser(catalog: catalog, query: query)
+                : _myCoursesBody(
+                    advisingLoading: advisingLoading,
+                    myCourses: myCourses,
+                    noPreAdvise: noPreAdvise,
+                    query: query,
+                    onBrowseAll: () => onToggleShowAll(true),
+                  ),
+          ),
+        ),
         if (!showAll && missing.isNotEmpty)
           InfoNote(
             text: 'Not in this catalog yet: ${missing.join(", ")}. The catalog '
@@ -203,6 +201,29 @@ class _Content extends StatelessWidget {
       ],
     );
   }
+}
+
+Widget _myCoursesBody({
+  required bool advisingLoading,
+  required List<CatalogCourse> myCourses,
+  required bool noPreAdvise,
+  required String query,
+  required VoidCallback onBrowseAll,
+}) {
+  if (advisingLoading && myCourses.isEmpty) {
+    return const LoadingState(label: 'Loading your pre-advised courses…');
+  }
+  if (noPreAdvise) {
+    return EmptyState(
+      icon: AppIcons.advising,
+      title: 'No pre-advised courses yet',
+      message: 'Pre-advise your courses on UCAM first (mark them Taken). '
+          'They’ll show here with their sections. Or browse all courses.',
+      actionLabel: 'Browse all courses',
+      onAction: onBrowseAll,
+    );
+  }
+  return _MyCoursesList(myCourses: myCourses, query: query);
 }
 
 /// The student's pre-advised courses (already a short list), filtered by search.
@@ -229,7 +250,10 @@ class _MyCoursesList extends StatelessWidget {
       stretch: false,
       spacing: Spacing.xl,
       runSpacing: Spacing.xl,
-      children: [for (final c in shown) CourseSectionsCard(course: c)],
+      children: [
+        for (final (i, c) in shown.indexed)
+          Reveal(index: i, child: CourseSectionsCard(course: c)),
+      ],
     );
   }
 }
@@ -283,7 +307,8 @@ class _AllCoursesBrowser extends StatelessWidget {
         for (var i = 0; i < groups.length; i++)
           Padding(
             padding: EdgeInsets.only(top: i == 0 ? 0 : Spacing.sm),
-            child: _SubjectTile(subject: groups[i].key, courses: groups[i].value),
+            child:
+                _SubjectTile(subject: groups[i].key, courses: groups[i].value),
           ),
       ],
     );
@@ -299,15 +324,13 @@ class _SubjectTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    return Container(
+    return Material(
+      color: scheme.surface,
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
       child: ExpansionTile(
-        leading: StatusBadge(subject),
+        leading: StatusBadge(subject, tone: StatusTone.accent),
         title: Text(_subjectName(subject), style: context.text.titleSmall),
         subtitle: Text(
             '${courses.length} course${courses.length == 1 ? "" : "s"}',

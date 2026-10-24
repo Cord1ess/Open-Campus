@@ -42,11 +42,13 @@ flutter:
     - assets/brand/
   fonts:
     # Google Sans Flex (SIL OFL 1.1, see assets/fonts/GoogleSansFlex-OFL.txt),
-    # bundled as static instances of the variable font with the Roundedness
-    # axis at 100 and subset to Latin, so the app renders in one friendly
-    # rounded typeface on every platform with no runtime font fetch.
+    # bundled as static instances of the variable font with its default sharp
+    # letterforms (Roundedness 0) in six weights, subset to Latin, so the app
+    # renders in one crisp typeface on every platform with no runtime fetch.
     - family: Google Sans Flex
       fonts:
+        - asset: assets/fonts/GoogleSansFlex-Light.ttf
+          weight: 300
         - asset: assets/fonts/GoogleSansFlex-Regular.ttf
           weight: 400
         - asset: assets/fonts/GoogleSansFlex-Medium.ttf
@@ -55,3 +57,5 @@ flutter:
           weight: 600
         - asset: assets/fonts/GoogleSansFlex-Bold.ttf
           weight: 700
+        - asset: assets/fonts/GoogleSansFlex-ExtraBold.ttf
+          weight: 800

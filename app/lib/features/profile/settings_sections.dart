@@ -55,9 +55,11 @@ class AppearanceSection extends ConsumerWidget {
               value: prefs.mode,
               onChanged: controller.setMode,
               options: const [
-                SegmentOption(AppThemeMode.light, 'Light', icon: AppIcons.light),
+                SegmentOption(AppThemeMode.light, 'Light',
+                    icon: AppIcons.light),
                 SegmentOption(AppThemeMode.dark, 'Dark', icon: AppIcons.dark),
-                SegmentOption(AppThemeMode.black, 'Black', icon: AppIcons.black),
+                SegmentOption(AppThemeMode.black, 'Black',
+                    icon: AppIcons.black),
               ],
             ),
           ),
@@ -119,8 +121,8 @@ class _Swatch extends StatelessWidget {
                   fill,
                   if (selected)
                     Center(
-                      child: Icon(AppIcons.check,
-                          size: 18, color: onColor(color)),
+                      child:
+                          Icon(AppIcons.check, size: 18, color: onColor(color)),
                     ),
                 ],
               ),
@@ -202,7 +204,8 @@ class _StorageSectionState extends ConsumerState<StorageSection> {
       summary = 'Nothing is stored on this device right now.';
     } else {
       final kb = cache.bytes / 1024;
-      final size = kb < 1 ? '<1 KB' : '${kb.toStringAsFixed(kb < 10 ? 1 : 0)} KB';
+      final size =
+          kb < 1 ? '<1 KB' : '${kb.toStringAsFixed(kb < 10 ? 1 : 0)} KB';
       final synced = cache.lastSynced != null
           ? FreshnessLine.ago(cache.lastSynced!)
           : 'unknown';
@@ -212,28 +215,42 @@ class _StorageSectionState extends ConsumerState<StorageSection> {
     }
     return Section(
       title: 'Storage',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Your last-loaded data is saved on this device so the app opens '
-            'instantly. The server keeps nothing; this is the only saved copy.',
-            style: context.text.bodySmall,
-          ),
-          const SizedBox(height: Spacing.sm),
-          Text(summary, style: context.text.labelMedium),
-          const SizedBox(height: Spacing.md),
-          OutlinedButton.icon(
-            onPressed: (empty || _clearing) ? null : _clear,
-            icon: _clearing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(AppIcons.delete, size: 18),
-            label: Text(_clearing ? 'Clearing…' : 'Clear cached data'),
-          ),
-        ],
+      child: Panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const IconTile(AppIcons.storage, hue: Hue.aqua),
+                const SizedBox(width: Spacing.md),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: Motion.medium,
+                    child: Text(summary,
+                        key: ValueKey(summary), style: context.text.titleSmall),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Spacing.md),
+            Text(
+              'Your last-loaded data is saved on this device so the app opens '
+              'instantly. The server keeps nothing; this is the only saved copy.',
+              style: context.text.bodySmall,
+            ),
+            const SizedBox(height: Spacing.lg),
+            OutlinedButton.icon(
+              onPressed: (empty || _clearing) ? null : _clear,
+              icon: _clearing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(AppIcons.delete, size: 18),
+              label: Text(_clearing ? 'Clearing…' : 'Clear cached data'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -313,17 +330,21 @@ class _ServerStatusSectionState extends ConsumerState<ServerStatusSection> {
       title: 'Server status',
       children: [
         ListRow(
-          leading: StatusDot(ink, size: 10),
+          leading: SizedBox(
+            width: 24,
+            child: Center(
+              child: tone == StatusTone.success
+                  ? LiveDot(color: ink, size: 9)
+                  : StatusDot(ink, size: 10),
+            ),
+          ),
           title: label,
           titleColor: tone == StatusTone.neutral ? null : ink,
           subtitle: detail,
           subtitleLines: 2,
           chevron: false,
           trailing: _checking
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+              ? const ExpressiveLoader(size: 22)
               : IconButton(
                   onPressed: _ping,
                   tooltip: 'Re-check',
@@ -344,8 +365,8 @@ class AboutSection extends StatelessWidget {
   const AboutSection({super.key});
 
   Future<void> _open(BuildContext context, String url) async {
-    final ok = await launchUrl(Uri.parse(url),
-        mode: LaunchMode.externalApplication);
+    final ok =
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the link.')),

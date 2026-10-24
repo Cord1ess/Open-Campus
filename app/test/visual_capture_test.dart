@@ -33,7 +33,7 @@ void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     final loader = FontLoader('Google Sans Flex');
-    for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+    for (final w in ['Light', 'Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) {
       loader.addFont(rootBundle.load('assets/fonts/GoogleSansFlex-$w.ttf'));
     }
     await loader.load();
@@ -68,12 +68,15 @@ void main() {
         ),
       ),
     ));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(seconds: 1));
+    // Run frames so staggered reveals and count-ups finish before capture.
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     if (tab != null) {
       await tester.tap(find.byTooltip(tab).first);
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(seconds: 2));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
     }
     final boundary =
         key.currentContext!.findRenderObject() as RenderRepaintBoundary;
@@ -110,5 +113,9 @@ void main() {
     await shot(tester, 'profile_desktop', const ProfilePage(), desktop);
     await shot(tester, 'login_desktop', const LoginScreen(), desktop);
     await shot(tester, 'login_phone', const LoginScreen(), phone);
+    await shot(tester, 'attendance_desktop', const AttendancePage(), desktop);
+    await shot(tester, 'routine_phone', const ClassRoutinePage(), phone);
+    await shot(tester, 'history_desktop', const PaymentHistoryPage(), desktop);
+    await shot(tester, 'grades_desktop', const CourseHistoryPage(), desktop);
   });
 }

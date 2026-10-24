@@ -43,8 +43,8 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
           () => ref.read(resultsProvider.notifier).load()),
       _Step('Fetching your attendance',
           () => ref.read(attendanceProvider.notifier).load()),
-      _Step('Fetching notices',
-          () => ref.read(noticesProvider.notifier).load()),
+      _Step(
+          'Fetching notices', () => ref.read(noticesProvider.notifier).load()),
       // The academic calendar drives the dashboard's payment + upcoming-events
       // blocks, so load it here too. Errors are swallowed by _run's try/catch.
       _Step('Fetching the academic calendar', () async {
@@ -83,14 +83,14 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
     // Once the profile step lands we can greet by first name (treat a blank
     // name from the backend as absent).
     final home = ref.watch(homeProvider);
-    final rawName = home is ResData<HomeSummary>
-        ? home.loaded.data.name?.trim()
-        : null;
+    final rawName =
+        home is ResData<HomeSummary> ? home.loaded.data.name?.trim() : null;
     final name = (rawName != null && rawName.isNotEmpty)
         ? rawName.split(' ').first
         : null;
 
     return Scaffold(
+      backgroundColor: context.palette.canvas,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(Spacing.xxl),
@@ -100,12 +100,21 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Center(child: BrandLogo(height: 56)),
+                const Reveal(child: Center(child: BrandLogo(height: 56))),
                 const SizedBox(height: Spacing.xxl),
-                Text(
-                  name != null ? 'Welcome, $name' : 'Setting up your campus',
-                  textAlign: TextAlign.center,
-                  style: context.text.titleMedium,
+                Reveal(
+                  index: 1,
+                  child: AnimatedSwitcher(
+                    duration: Motion.medium,
+                    child: Text(
+                      name != null
+                          ? 'Welcome, $name'
+                          : 'Setting up your campus',
+                      key: ValueKey(name),
+                      textAlign: TextAlign.center,
+                      style: context.text.headlineSmall,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: Spacing.xs),
                 Text(
@@ -115,17 +124,26 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
                 ),
                 const SizedBox(height: Spacing.xl),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(Radii.xs),
-                  child: LinearProgressIndicator(
-                    value: _doneCount == 0 ? null : progress.clamp(0.0, 1.0),
-                    minHeight: 4,
+                  borderRadius: BorderRadius.circular(Radii.full),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(end: progress.clamp(0.0, 1.0)),
+                    duration: Motion.slow,
+                    curve: Curves.easeOutCubic,
+                    builder: (_, v, __) => LinearProgressIndicator(
+                      value: _doneCount == 0 ? null : v,
+                      minHeight: 8,
+                    ),
                   ),
                 ),
                 const SizedBox(height: Spacing.xl),
                 for (var i = 0; i < _steps.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
-                    child: _StepRow(label: _steps[i].label, done: _stepDone[i]),
+                  Reveal(
+                    index: i + 2,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+                      child:
+                          _StepRow(label: _steps[i].label, done: _stepDone[i]),
+                    ),
                   ),
                 const SizedBox(height: Spacing.sm),
                 Text(
@@ -156,15 +174,18 @@ class _StepRow extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 18,
-          height: 18,
-          child: done
-              ? Icon(AppIcons.success,
-                  size: 18, color: context.palette.successInk)
-              : const Padding(
-                  padding: EdgeInsets.all(1),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+          width: 22,
+          height: 22,
+          child: AnimatedSwitcher(
+            duration: Motion.medium,
+            transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+            child: done
+                ? Icon(AppIcons.success,
+                    key: const ValueKey('done'),
+                    size: 22,
+                    color: context.palette.successInk)
+                : const ExpressiveLoader(key: ValueKey('busy'), size: 20),
+          ),
         ),
         const SizedBox(width: Spacing.md),
         Expanded(
