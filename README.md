@@ -129,8 +129,8 @@ what the server does and does not keep, and the app surfaces it to you in the UI
 
 **Experience**
 
-- Material 3 Expressive design, light / dark / AMOLED themes, custom accent colors
-- Instant launch via on-device caching, smooth 120Hz-friendly rendering
+- Clean, minimal Material 3 interface with contrast-checked colours, light / dark / AMOLED themes and custom accents
+- Instant launch via on-device caching
 - Responsive layouts for phone and desktop web
 - On-device reminders for calendar events and installment deadlines
 
@@ -195,7 +195,7 @@ apps keep working off cache in the meantime.
 | Layer | Technology |
 |-------|------------|
 | Frontend | Flutter, Dart, Riverpod, dio, fl_chart |
-| Design | Material 3 Expressive, custom design system, spring physics |
+| Design | Material 3, custom design tokens (Inter, semantic colour palette, shared components) |
 | Backend | Python, FastAPI, httpx, selectolax |
 | Auth | Signed app token (JWT), in-memory UCAM session, no password storage |
 | Storage | None server side. On-device cache via shared_preferences; token in secure storage |

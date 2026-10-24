@@ -60,12 +60,12 @@ core/
   api/        api_config (base url per platform), api_client (dio + ApiResult)
   auth/       token_storage (secure)
   cache/      local_cache (on-device last-view — the stateless-server model)
-  theme/      app_theme (design system: colors, type, spacing, light/dark)
+  theme/      app_theme (design tokens: palette, type, spacing, light/dark/black)
   providers   Riverpod singletons (api client, token, cache)
 features/
   auth/       auth_controller (login/restore/logout), login_screen
   dashboard/  models, dashboard_controller (live → cache fallback), dashboard_screen
-shared/       widgets (SectionCard, FreshnessChip, Skeleton, ReloginBanner)
+shared/       design-system widgets (PageScaffold, ListRow, StatStrip, StatusBadge, states, …)
 main.dart     routes login ⇄ dashboard on auth state
 ```
 
