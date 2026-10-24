@@ -32,11 +32,21 @@ void main() {
 
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
-    final loader = FontLoader('Inter');
+    final loader = FontLoader('Google Sans Flex');
     for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
-      loader.addFont(rootBundle.load('assets/fonts/Inter-$w.ttf'));
+      loader.addFont(rootBundle.load('assets/fonts/GoogleSansFlex-$w.ttf'));
     }
     await loader.load();
+    // Material icons from the Flutter SDK so icons render in captures.
+    final sdk = Platform.environment['FLUTTER_ROOT'];
+    if (sdk != null) {
+      final f = File('$sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+      if (f.existsSync()) {
+        final icons = FontLoader('MaterialIcons')
+          ..addFont(Future.value(ByteData.sublistView(f.readAsBytesSync())));
+        await icons.load();
+      }
+    }
   });
 
   Future<void> shot(WidgetTester tester, String name, Widget page, Size size,
@@ -61,8 +71,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(seconds: 1));
     if (tab != null) {
-      await tester.tap(find.text(tab).first);
+      await tester.tap(find.byTooltip(tab).first);
       await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(seconds: 2));
     }
     final boundary =
         key.currentContext!.findRenderObject() as RenderRepaintBoundary;

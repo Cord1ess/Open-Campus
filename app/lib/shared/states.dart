@@ -1,9 +1,84 @@
 import 'package:flutter/material.dart';
 
+import 'dart:math' as math;
+
 import '../core/theme/app_theme.dart';
 import 'app_icons.dart';
+import 'expressive_shape.dart';
 
-/// Loading: a plain indicator with an optional label. No halo, no shimmer.
+/// The Material 3 Expressive loading indicator: a filled shape that rotates
+/// while morphing between a scalloped cookie and a four-leaf clover.
+class ExpressiveLoader extends StatefulWidget {
+  final double size;
+  final Color? color;
+  const ExpressiveLoader({super.key, this.size = 40, this.color});
+
+  @override
+  State<ExpressiveLoader> createState() => _ExpressiveLoaderState();
+}
+
+class _ExpressiveLoaderState extends State<ExpressiveLoader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1600))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.color ?? context.palette.accent;
+    return Semantics(
+      label: 'Loading',
+      child: RepaintBoundary(
+        child: SizedBox.square(
+          dimension: widget.size,
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (_, __) => CustomPaint(
+              painter: _MorphPainter(_c.value, color),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MorphPainter extends CustomPainter {
+  final double t;
+  final Color color;
+  _MorphPainter(this.t, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Ease between the two shapes twice per turn.
+    final m = 0.5 - 0.5 * math.cos(t * 4 * math.pi);
+    final c = size.center(Offset.zero);
+    final base = size.shortestSide / 2 / 1.16;
+    final rot = t * 2 * math.pi;
+    final path = Path();
+    const steps = 160;
+    for (var i = 0; i <= steps; i++) {
+      final a = i / steps * 2 * math.pi;
+      final cookie = 1 + 0.06 * math.cos(9 * (a + rot));
+      final clover = 1 + 0.16 * math.cos(4 * (a + rot));
+      final r = base * (cookie + (clover - cookie) * m);
+      final p = Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a));
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(path..close(), Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_MorphPainter old) => old.t != t || old.color != color;
+}
+
+/// Loading: the Expressive loader with an optional label.
 class LoadingState extends StatelessWidget {
   final String? label;
   final double verticalPadding;
@@ -17,11 +92,7 @@ class LoadingState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
+            const ExpressiveLoader(size: 36),
             if (label != null) ...[
               const SizedBox(height: Spacing.md),
               Text(label!,
@@ -44,6 +115,7 @@ class EmptyState extends StatelessWidget {
   final VoidCallback? onAction;
   final IconData? actionIcon;
   final bool compact;
+  final Hue hue;
   const EmptyState({
     super.key,
     this.icon = AppIcons.empty,
@@ -53,11 +125,11 @@ class EmptyState extends StatelessWidget {
     this.onAction,
     this.actionIcon,
     this.compact = false,
+    this.hue = Hue.lavender,
   });
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
     return Padding(
       padding: EdgeInsets.symmetric(
           vertical: compact ? Spacing.lg : Spacing.xxl, horizontal: Spacing.lg),
@@ -67,10 +139,14 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: compact ? 24 : 32, color: scheme.onSurfaceVariant),
-              SizedBox(height: compact ? Spacing.sm : Spacing.md),
+              ShapeIcon(icon,
+                  hue: hue,
+                  shape: ExpressiveShapeKind.cookie,
+                  size: compact ? 52 : 72),
+              SizedBox(height: compact ? Spacing.md : Spacing.lg),
               Text(title,
-                  textAlign: TextAlign.center, style: context.text.titleSmall),
+                  textAlign: TextAlign.center,
+                  style: compact ? context.text.titleMedium : context.text.titleLarge),
               if (message != null) ...[
                 const SizedBox(height: Spacing.xs),
                 Text(message!,
@@ -79,12 +155,18 @@ class EmptyState extends StatelessWidget {
               if (onAction != null) ...[
                 const SizedBox(height: Spacing.lg),
                 actionIcon != null
-                    ? FilledButton.tonalIcon(
+                    ? FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: context.palette.ink,
+                            foregroundColor: context.palette.onInk),
                         onPressed: onAction,
                         icon: Icon(actionIcon, size: 18),
                         label: Text(actionLabel ?? 'Retry'),
                       )
-                    : FilledButton.tonal(
+                    : FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: context.palette.ink,
+                            foregroundColor: context.palette.onInk),
                         onPressed: onAction,
                         child: Text(actionLabel ?? 'Retry'),
                       ),
@@ -120,6 +202,7 @@ class ErrorState extends StatelessWidget {
         actionIcon: AppIcons.refresh,
         onAction: onRetry,
         compact: compact,
+        hue: Hue.rose,
       );
 }
 

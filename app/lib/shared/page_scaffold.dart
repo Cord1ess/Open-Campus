@@ -1,17 +1,29 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'app_icons.dart';
+import 'list_row.dart';
 import 'responsive.dart';
 
-/// The one page frame used by every screen: a standard 56-px pinned app bar,
-/// optional pull-to-refresh, and content centred to a readable width with
-/// consistent gutters. On desktop the title and actions align with the content
-/// column so the page reads as one block instead of a title stranded at the
-/// window edge.
+/// Extra bottom space the app shell needs pages to leave free (the floating
+/// navigation bar sits over the content on phones).
+class ShellInsets extends InheritedWidget {
+  final double bottom;
+  const ShellInsets({super.key, required this.bottom, required super.child});
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ShellInsets>()?.bottom ?? 0;
+
+  @override
+  bool updateShouldNotify(ShellInsets old) => old.bottom != bottom;
+}
+
+/// The page frame used by every screen.
 ///
-/// Pass either [body] (a single boxed widget, the common case) or [slivers]
-/// (for lazy lists). The bottom safe-area inset is handled here, so pages no
-/// longer add their own spacer.
+/// Pushed pages get a circular back button and a centred title. Top-level tab
+/// pages ([showBack] false) get a large bold title at the left. Content is
+/// centred to a readable width with consistent gutters on a soft canvas, and
+/// the bottom inset (safe area + floating nav) is handled here.
 class PageScaffold extends StatelessWidget {
   final String title;
   final Widget? titleWidget;
@@ -23,8 +35,6 @@ class PageScaffold extends StatelessWidget {
   final double maxWidth;
   final bool? showBack;
   final ScrollController? controller;
-
-  /// Vertical space between the app bar and the first content.
   final double topGap;
 
   const PageScaffold({
@@ -45,29 +55,72 @@ class PageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Centre within the space this page actually gets (beside the sidebar on
+    // desktop), not the whole window.
+    return LayoutBuilder(
+        builder: (context, c) => _build(context, c.maxWidth));
+  }
+
+  Widget _build(BuildContext context, double available) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canPop = showBack ?? (ModalRoute.of(context)?.canPop ?? false);
-    final pad = Breakpoints.centeredPadding(context, maxWidth: maxWidth);
-    final bottomInset = MediaQuery.paddingOf(context).bottom + Spacing.xxl;
+    final pad = Breakpoints.centeredPadding(context,
+        maxWidth: maxWidth, totalWidth: available);
+    final bottomInset = MediaQuery.paddingOf(context).bottom +
+        ShellInsets.of(context) +
+        Spacing.xxl;
+    final canvas = context.palette.canvas;
 
-    // Keep the title flush with the content column. The leading button is
-    // 56 wide, so subtract it when present.
-    final titleSpacing = (canPop ? pad.left - 56 : pad.left)
-        .clamp(Spacing.lg, double.infinity)
-        .toDouble();
-    final actionsEnd = (pad.right - Spacing.sm).clamp(Spacing.xs, 999.0);
+    final edgeActions = actions == null
+        ? null
+        : <Widget>[
+            ...actions!,
+            SizedBox(width: (pad.right - Spacing.xs).clamp(Spacing.sm, 999.0)),
+          ];
 
-    final appBar = SliverAppBar(
-      pinned: true,
-      automaticallyImplyLeading: canPop,
-      titleSpacing: titleSpacing,
-      systemOverlayStyle: appBarOverlayStyle(isDark),
-      title: titleWidget ??
-          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      actions: actions == null
-          ? null
-          : [...actions!, SizedBox(width: actionsEnd)],
-    );
+    final SliverAppBar appBar;
+    if (canPop) {
+      appBar = SliverAppBar(
+        pinned: true,
+        backgroundColor: canvas,
+        toolbarHeight: 64,
+        systemOverlayStyle: appBarOverlayStyle(isDark),
+        leadingWidth: pad.left + 44,
+        leading: Padding(
+          padding: EdgeInsets.only(left: pad.left),
+          child: Center(
+            child: CircleButton(
+              icon: AppIcons.back,
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+        ),
+        centerTitle: true,
+        title: titleWidget ??
+            Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.titleLarge),
+        actions: edgeActions,
+      );
+    } else {
+      appBar = SliverAppBar(
+        pinned: true,
+        backgroundColor: canvas,
+        toolbarHeight: 72,
+        automaticallyImplyLeading: false,
+        systemOverlayStyle: appBarOverlayStyle(isDark),
+        centerTitle: false,
+        titleSpacing: pad.left,
+        title: titleWidget ??
+            Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.headlineMedium),
+        actions: edgeActions,
+      );
+    }
 
     final content = <Widget>[
       appBar,
@@ -77,13 +130,9 @@ class PageScaffold extends StatelessWidget {
           sliver: SliverToBoxAdapter(child: body),
         ),
       if (slivers != null) ...[
-        SliverPadding(
-            padding: EdgeInsets.only(top: topGap),
-            sliver: const SliverToBoxAdapter(child: SizedBox.shrink())),
+        SliverToBoxAdapter(child: SizedBox(height: topGap)),
         for (final s in slivers!) SliverPadding(padding: pad, sliver: s),
-        SliverPadding(
-            padding: EdgeInsets.only(bottom: bottomInset),
-            sliver: const SliverToBoxAdapter(child: SizedBox.shrink())),
+        SliverToBoxAdapter(child: SizedBox(height: bottomInset)),
       ],
     ];
 
@@ -95,13 +144,19 @@ class PageScaffold extends StatelessWidget {
     if (onRefresh != null) {
       scroll = RefreshIndicator(
         onRefresh: onRefresh!,
-        edgeOffset: 56,
+        edgeOffset: 64,
         child: scroll,
       );
     }
     return Scaffold(
+      backgroundColor: canvas,
       body: scroll,
-      floatingActionButton: floatingActionButton,
+      floatingActionButton: floatingActionButton == null
+          ? null
+          : Padding(
+              padding: EdgeInsets.only(bottom: ShellInsets.of(context)),
+              child: floatingActionButton,
+            ),
     );
   }
 }
@@ -114,7 +169,7 @@ class Stacked extends StatelessWidget {
   const Stacked({
     super.key,
     required this.children,
-    this.gap = Spacing.xl,
+    this.gap = Spacing.xl + 4,
     this.crossAxisAlignment = CrossAxisAlignment.stretch,
   });
 

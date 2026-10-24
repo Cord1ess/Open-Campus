@@ -3,6 +3,7 @@ library;
 
 export '../core/theme/motion.dart' show appRoute;
 export 'app_icons.dart';
+export 'expressive_shape.dart';
 export 'info_note.dart';
 export 'list_row.dart';
 export 'page_scaffold.dart';

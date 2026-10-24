@@ -36,7 +36,7 @@
   <!-- White status/notification bar during load, matching the always-white boot
        loader below, so the bar reads as one continuous surface. Once Flutter
        boots it drives the bar color itself via AnnotatedRegion. -->
-  <meta name="theme-color" content="#FFFFFF">
+  <meta name="theme-color" content="#F4F4F7">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -61,24 +61,24 @@
        browser can't know the engine's total download size, so an honest
        "actively loading" bar beats a fake percentage. -->
   <style>
-    /* Self-host Inter so the boot loader text (which paints before Flutter loads
-       its own bundled Inter) is already in the app's typeface — one consistent
+    /* Self-host Google Sans Flex so the boot loader text (which paints before
+       Flutter loads its own bundled copy) is already in the app's typeface — one consistent
        font from the very first frame. Only the weights the loader uses. */
-    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400;
-      font-display: swap; src: url('fonts/Inter-Regular.ttf') format('truetype'); }
-    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600;
-      font-display: swap; src: url('fonts/Inter-SemiBold.ttf') format('truetype'); }
-    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 700;
-      font-display: swap; src: url('fonts/Inter-Bold.ttf') format('truetype'); }
+    @font-face { font-family: 'Google Sans Flex'; font-style: normal; font-weight: 400;
+      font-display: swap; src: url('fonts/GoogleSansFlex-Regular.ttf') format('truetype'); }
+    @font-face { font-family: 'Google Sans Flex'; font-style: normal; font-weight: 600;
+      font-display: swap; src: url('fonts/GoogleSansFlex-SemiBold.ttf') format('truetype'); }
+    @font-face { font-family: 'Google Sans Flex'; font-style: normal; font-weight: 700;
+      font-display: swap; src: url('fonts/GoogleSansFlex-Bold.ttf') format('truetype'); }
     /* Always white, regardless of the OS dark-mode setting — the loader is a
        clean white screen with the brand icon centered, matching the in-app
        splash so the hand-off to Flutter is seamless. */
-    html, body { margin: 0; padding: 0; background: #FFFFFF; }
+    html, body { margin: 0; padding: 0; background: #F4F4F7; }
     #boot-loader {
       position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; z-index: 9999;
-      background: #FFFFFF; color: #16191E;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      background: #F4F4F7; color: #15161A;
+      font-family: 'Google Sans Flex', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     /* The brand icon renders on its own (its blue+orange sit on the neutral boot
        surface). No colored tile behind it — the mark is never placed on an
        orange or blue background. */
@@ -86,16 +86,16 @@
       display: flex; align-items: center; justify-content: center; }
     #boot-loader .logo svg { width: 72px; height: 72px; }
     #boot-loader .title {
-      margin-top: 24px; font-size: 20px; font-weight: 600; }
+      margin-top: 24px; font-size: 24px; font-weight: 700; }
     #boot-loader .desc {
-      margin-top: 6px; font-size: 14px; color: #5C6470; text-align: center;
+      margin-top: 6px; font-size: 14px; color: #5F6168; text-align: center;
       max-width: 280px; line-height: 1.45; }
     #boot-loader .bar {
-      margin-top: 32px; width: 160px; height: 3px; border-radius: 2px;
-      background: #E5E9ED; overflow: hidden; position: relative; }
+      margin-top: 32px; width: 160px; height: 6px; border-radius: 999px;
+      background: #FFD9B0; overflow: hidden; position: relative; }
     #boot-loader .bar::before {
       content: ''; position: absolute; left: 0; top: 0; height: 100%;
-      width: 40%; border-radius: 2px; background: #B85C00;
+      width: 40%; border-radius: 999px; background: #FF8007;
       animation: boot-slide 1.25s ease-in-out infinite; }
     @keyframes boot-slide {
       0%   { left: -40%; width: 40%; }

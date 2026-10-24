@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// A transparent system-bar overlay whose icon brightness follows the APP theme
-/// ([isDark]) — not the OS dark-mode setting — so the status/navigation bars
-/// show the app's own surface behind them.
+/// ([isDark]), not the OS setting, so the status/navigation bars show the app's
+/// own background behind them.
 SystemUiOverlayStyle appBarOverlayStyle(bool isDark) => SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
@@ -17,19 +17,18 @@ SystemUiOverlayStyle appBarOverlayStyle(bool isDark) => SystemUiOverlayStyle(
           isDark ? Brightness.light : Brightness.dark,
     );
 
-/// Open Campus design tokens.
+/// Open Campus design tokens — a Material 3 Expressive interpretation.
 ///
-/// The system is deliberately quiet: neutral surfaces, hairline dividers, one
-/// interactive accent, and semantic colour only where it carries meaning. Every
-/// colour used for TEXT or ICONS is contrast-checked against the surface it sits
-/// on (see [readableInk]), so the brand orange/blue — which are too light to read
-/// on white — get a darker "ink" shade for text while keeping the original hue
-/// for fills.
+/// The look: a soft off-white canvas, white rounded cards, and bold pastel
+/// COLOUR CONTAINERS (lavender, peach, sky, mint, pink, lemon) that carry the
+/// main takeaway of each screen, with near-black "ink" for text, the selected
+/// navigation item and primary chips. The brand orange and blue from the logo
+/// drive the accent fill and the peach/sky containers.
 class AppColors {
   /// Brand orange (from the logo). The default accent fill.
   static const orange = Color(0xFFFF8007);
 
-  /// Brand blue (from the logo). The default informational colour.
+  /// Brand blue (from the logo).
   static const blue = Color(0xFF05BADD);
 
   /// Sentinel seed meaning "the brand orange + blue scheme".
@@ -50,67 +49,94 @@ class Spacing {
   static const xxl = 32.0;
 }
 
-/// Shape tokens. Controls and chips use [sm]; panels and cards use [md];
-/// sheets and dialogs use [lg]. [full] is reserved for avatars and true chips.
+/// Expressive shape scale. Small controls use [sm]; tiles and inner blocks use
+/// [md]; cards use [lg]; hero containers use [xl]. Buttons, chips and the
+/// navigation bar are fully rounded ([full]).
 class Radii {
-  static const xs = 6.0;
-  static const sm = 8.0;
-  static const md = 12.0;
-  static const lg = 16.0;
+  static const xs = 8.0;
+  static const sm = 12.0;
+  static const md = 20.0;
+  static const lg = 28.0;
+  static const xl = 32.0;
   static const full = 999.0;
 }
 
-/// Motion: short, functional durations only (expand/collapse, selection moves,
-/// theme cross-fade). No decorative entrance animation.
+/// Motion durations (functional: selection, expand/collapse, theme change).
 class Motion {
   static const emphasized = Curves.easeOutCubic;
-  static const emphasizedDecelerate = Curves.easeOutCubic;
-  static const fast = Duration(milliseconds: 150);
-  static const medium = Duration(milliseconds: 250);
-  static const slow = Duration(milliseconds: 400);
+  static const emphasizedDecelerate = Cubic(0.05, 0.7, 0.1, 1.0);
+  static const fast = Duration(milliseconds: 180);
+  static const medium = Duration(milliseconds: 300);
+  static const slow = Duration(milliseconds: 450);
 }
 
-/// Semantic tone of a badge / note / status line.
+/// Semantic tone of a badge / note / status / tile.
 enum StatusTone { neutral, accent, info, success, warning, danger }
 
-/// The app's semantic palette, exposed as a theme extension so every colour
-/// with MEANING comes from one place. Fills are the saturated brand colours;
-/// inks are contrast-safe for text on the current surface; tints are soft
-/// opaque backgrounds for badges and notes.
-class AppPalette extends ThemeExtension<AppPalette> {
-  final Color accent, onAccent, accentInk, accentTint;
-  final Color info, onInfo, infoInk, infoTint;
-  final Color success, successInk, successTint;
-  final Color warning, warningInk, warningTint;
-  final Color danger, dangerInk, dangerTint;
+/// Decorative-but-meaningful colour containers, used to colour-code features
+/// and to give each screen a focal block (Material 3 Expressive "mix
+/// primary/secondary/tertiary containers to highlight the main takeaway").
+enum Hue { lavender, peach, sky, mint, pink, lemon, aqua, rose }
 
-  /// Distinguishable, theme-coherent colours for multi-series charts and the
-  /// weekly schedule grid (one colour per course). Text drawn on them should use
-  /// [onAccent]-style selection via [onColor].
+/// The app's palette as a theme extension: every colour with meaning comes
+/// from here.
+class AppPalette extends ThemeExtension<AppPalette> {
+  /// Accent fill (buttons, progress) and the readable text on it.
+  final Color accent, onAccent;
+
+  /// Contrast-safe text/icon colours on the page/card surface.
+  final Color accentInk, infoInk, successInk, warningInk, dangerInk;
+
+  /// Near-black ink for the navigation bar, selected chips and dark buttons,
+  /// and the text drawn on it.
+  final Color ink, onInk;
+
+  /// The pastel container colours (by [Hue]) and the dark text drawn on them.
+  final Map<Hue, Color> containers;
+  final Color onContainer;
+
+  /// Page canvas behind the white cards.
+  final Color canvas;
+
+  /// Chart / schedule series colours (pastel containers, dark text on top).
   final List<Color> series;
 
   const AppPalette({
     required this.accent,
     required this.onAccent,
     required this.accentInk,
-    required this.accentTint,
-    required this.info,
-    required this.onInfo,
     required this.infoInk,
-    required this.infoTint,
-    required this.success,
     required this.successInk,
-    required this.successTint,
-    required this.warning,
     required this.warningInk,
-    required this.warningTint,
-    required this.danger,
     required this.dangerInk,
-    required this.dangerTint,
+    required this.ink,
+    required this.onInk,
+    required this.containers,
+    required this.onContainer,
+    required this.canvas,
     required this.series,
   });
 
-  /// Readable text/icon colour for a [tone] on the page surface.
+  Color container(Hue h) => containers[h]!;
+
+  /// The container hue that represents a semantic tone.
+  static Hue hueFor(StatusTone tone) => switch (tone) {
+        StatusTone.neutral => Hue.lavender,
+        StatusTone.accent => Hue.peach,
+        StatusTone.info => Hue.sky,
+        StatusTone.success => Hue.mint,
+        StatusTone.warning => Hue.lemon,
+        StatusTone.danger => Hue.rose,
+      };
+
+  // Legacy names (badges/notes use the pastel container as their "tint").
+  Color get accentTint => container(Hue.peach);
+  Color get infoTint => container(Hue.sky);
+  Color get successTint => container(Hue.mint);
+  Color get warningTint => container(Hue.lemon);
+  Color get dangerTint => container(Hue.rose);
+
+  /// Readable text/icon colour for a [tone] on the card surface.
   Color inkFor(StatusTone tone, ColorScheme scheme) => switch (tone) {
         StatusTone.neutral => scheme.onSurfaceVariant,
         StatusTone.accent => accentInk,
@@ -120,24 +146,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
         StatusTone.danger => dangerInk,
       };
 
-  /// Soft background for a [tone] (badges, notes).
-  Color tintFor(StatusTone tone, ColorScheme scheme) => switch (tone) {
-        StatusTone.neutral => scheme.surfaceContainerHigh,
-        StatusTone.accent => accentTint,
-        StatusTone.info => infoTint,
-        StatusTone.success => successTint,
-        StatusTone.warning => warningTint,
-        StatusTone.danger => dangerTint,
-      };
+  /// Pastel background for a [tone].
+  Color tintFor(StatusTone tone, ColorScheme scheme) =>
+      tone == StatusTone.neutral
+          ? scheme.surfaceContainerHigh
+          : container(hueFor(tone));
 
   /// Solid fill for a [tone] (progress bars, dots).
   Color fillFor(StatusTone tone, ColorScheme scheme) => switch (tone) {
         StatusTone.neutral => scheme.onSurfaceVariant,
-        StatusTone.accent => accentInk,
-        StatusTone.info => infoInk,
-        StatusTone.success => successInk,
-        StatusTone.warning => warningInk,
-        StatusTone.danger => dangerInk,
+        StatusTone.accent => accent,
+        _ => inkFor(tone, scheme),
       };
 
   @override
@@ -145,20 +164,15 @@ class AppPalette extends ThemeExtension<AppPalette> {
         accent: accent,
         onAccent: onAccent,
         accentInk: accentInk,
-        accentTint: accentTint,
-        info: info,
-        onInfo: onInfo,
         infoInk: infoInk,
-        infoTint: infoTint,
-        success: success,
         successInk: successInk,
-        successTint: successTint,
-        warning: warning,
         warningInk: warningInk,
-        warningTint: warningTint,
-        danger: danger,
         dangerInk: dangerInk,
-        dangerTint: dangerTint,
+        ink: ink,
+        onInk: onInk,
+        containers: containers,
+        onContainer: onContainer,
+        canvas: canvas,
         series: series ?? this.series,
       );
 
@@ -170,20 +184,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
       accent: l(accent, other.accent),
       onAccent: l(onAccent, other.onAccent),
       accentInk: l(accentInk, other.accentInk),
-      accentTint: l(accentTint, other.accentTint),
-      info: l(info, other.info),
-      onInfo: l(onInfo, other.onInfo),
       infoInk: l(infoInk, other.infoInk),
-      infoTint: l(infoTint, other.infoTint),
-      success: l(success, other.success),
       successInk: l(successInk, other.successInk),
-      successTint: l(successTint, other.successTint),
-      warning: l(warning, other.warning),
       warningInk: l(warningInk, other.warningInk),
-      warningTint: l(warningTint, other.warningTint),
-      danger: l(danger, other.danger),
       dangerInk: l(dangerInk, other.dangerInk),
-      dangerTint: l(dangerTint, other.dangerTint),
+      ink: l(ink, other.ink),
+      onInk: l(onInk, other.onInk),
+      containers: {
+        for (final h in Hue.values) h: l(containers[h]!, other.containers[h]!),
+      },
+      onContainer: l(onContainer, other.onContainer),
+      canvas: l(canvas, other.canvas),
       series: [
         for (var i = 0; i < math.min(series.length, other.series.length); i++)
           l(series[i], other.series[i]),
@@ -192,8 +203,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
   }
 }
 
-/// Compatibility view over [AppPalette] for the older `context.status` call
-/// sites (good / warn / bad + containers).
+/// Compatibility view for older `context.status` call sites.
 class StatusColors {
   final Color good, goodContainer, warn, warnContainer, bad, badContainer;
   final Color info, infoContainer;
@@ -231,15 +241,12 @@ extension StatusX on BuildContext {
 double contrastRatio(Color a, Color b) {
   final la = a.computeLuminance();
   final lb = b.computeLuminance();
-  final hi = math.max(la, lb);
-  final lo = math.min(la, lb);
-  return (hi + 0.05) / (lo + 0.05);
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
 }
 
-/// Near-black or white — whichever reads better on [fill]. Used for text drawn
-/// ON a solid accent (buttons, selected segments, calendar blocks).
+/// Near-black or white — whichever reads better on [fill].
 Color onColor(Color fill) {
-  const dark = Color(0xFF16191E);
+  const dark = Color(0xFF15161A);
   return contrastRatio(dark, fill) >= contrastRatio(Colors.white, fill)
       ? dark
       : Colors.white;
@@ -248,9 +255,8 @@ Color onColor(Color fill) {
 /// Backwards-compatible name for [onColor].
 Color onAccent(Color accent) => onColor(accent);
 
-/// Darken (on light surfaces) or lighten (on dark surfaces) [base] until it
-/// reaches at least [min] contrast against [surface]. Hue and saturation are
-/// kept, so the result still reads as "the brand orange", just legible.
+/// Darken (on light surfaces) or lighten (on dark ones) [base] until it reaches
+/// [min] contrast against [surface], keeping its hue.
 Color readableInk(Color base, Color surface, {double min = 4.5}) {
   if (contrastRatio(base, surface) >= min) return base;
   final hsl = HSLColor.fromColor(base);
@@ -264,173 +270,181 @@ Color readableInk(Color base, Color surface, {double min = 4.5}) {
   return c;
 }
 
-/// An opaque soft tint of [base] over [surface] (for badges and notes).
+/// An opaque soft tint of [base] over [surface].
 Color tintOf(Color base, Color surface, {double alpha = 0.12}) =>
     Color.alphaBlend(base.withValues(alpha: alpha), surface);
 
 class AppTheme {
-  /// The one typeface used everywhere (Inter, bundled static weights).
-  static const fontFamily = 'Inter';
+  static const fontFamily = 'Google Sans Flex';
 
   static ThemeData light({Color seed = AppColors.seed}) =>
       _build(Brightness.light, seed: seed);
   static ThemeData dark({Color seed = AppColors.seed, bool black = false}) =>
       _build(Brightness.dark, seed: seed, black: black);
 
-  // ---- Neutral surfaces -----------------------------------------------------
+  static const _inkDark = Color(0xFF15161A);
 
-  static const _lightSurface = Colors.white;
-  static const _darkSurface = Color(0xFF0E1116);
+  static Map<Hue, Color> _containers(Brightness b) => b == Brightness.light
+      ? const {
+          Hue.lavender: Color(0xFFCDBDFF),
+          Hue.peach: Color(0xFFFFC688),
+          Hue.sky: Color(0xFFAAD5FF),
+          Hue.mint: Color(0xFFBDEBC5),
+          Hue.pink: Color(0xFFF7BCEC),
+          Hue.lemon: Color(0xFFFFE08A),
+          Hue.aqua: Color(0xFFA5E4F1),
+          Hue.rose: Color(0xFFFFC1BB),
+        }
+      : const {
+          Hue.lavender: Color(0xFFB4A2F2),
+          Hue.peach: Color(0xFFF2AE66),
+          Hue.sky: Color(0xFF8EC0F2),
+          Hue.mint: Color(0xFF9CD6A9),
+          Hue.pink: Color(0xFFE39FD8),
+          Hue.lemon: Color(0xFFEDCB66),
+          Hue.aqua: Color(0xFF82CFE0),
+          Hue.rose: Color(0xFFF0A49C),
+        };
 
   static ColorScheme _neutralScheme(Brightness b, {bool black = false}) {
     if (b == Brightness.light) {
       return const ColorScheme.light().copyWith(
-        surface: _lightSurface,
-        onSurface: const Color(0xFF16191E),
-        onSurfaceVariant: const Color(0xFF5C6470),
+        surface: Colors.white,
+        onSurface: _inkDark,
+        onSurfaceVariant: const Color(0xFF5F6168),
         surfaceContainerLowest: Colors.white,
-        surfaceContainerLow: const Color(0xFFF7F8FA),
-        surfaceContainer: const Color(0xFFF2F4F6),
-        surfaceContainerHigh: const Color(0xFFECEFF2),
-        surfaceContainerHighest: const Color(0xFFE5E9ED),
-        outline: const Color(0xFFC9CFD6),
-        outlineVariant: const Color(0xFFE3E7EB),
-        inverseSurface: const Color(0xFF2A2F36),
-        onInverseSurface: const Color(0xFFF2F4F6),
+        surfaceContainerLow: const Color(0xFFF8F8FA),
+        surfaceContainer: const Color(0xFFF1F1F5),
+        surfaceContainerHigh: const Color(0xFFEBEBF0),
+        surfaceContainerHighest: const Color(0xFFE3E3EA),
+        outline: const Color(0xFFC9CAD2),
+        outlineVariant: const Color(0xFFE8E8EE),
+        inverseSurface: _inkDark,
+        onInverseSurface: const Color(0xFFF4F4F7),
         surfaceTint: Colors.transparent,
         scrim: Colors.black,
       );
     }
     var s = const ColorScheme.dark().copyWith(
-      surface: _darkSurface,
-      onSurface: const Color(0xFFE9EDF1),
-      onSurfaceVariant: const Color(0xFF9AA4B0),
-      surfaceContainerLowest: const Color(0xFF0B0E12),
-      surfaceContainerLow: const Color(0xFF14181E),
-      surfaceContainer: const Color(0xFF181D24),
-      surfaceContainerHigh: const Color(0xFF1F252D),
-      surfaceContainerHighest: const Color(0xFF272E37),
-      outline: const Color(0xFF39414B),
-      outlineVariant: const Color(0xFF252B33),
-      inverseSurface: const Color(0xFFE9EDF1),
-      onInverseSurface: const Color(0xFF16191E),
+      surface: const Color(0xFF1A1B20),
+      onSurface: const Color(0xFFF0F0F4),
+      onSurfaceVariant: const Color(0xFFA4A6B0),
+      surfaceContainerLowest: const Color(0xFF0F1013),
+      surfaceContainerLow: const Color(0xFF1F2026),
+      surfaceContainer: const Color(0xFF24252C),
+      surfaceContainerHigh: const Color(0xFF2B2C34),
+      surfaceContainerHighest: const Color(0xFF34363F),
+      outline: const Color(0xFF4A4C57),
+      outlineVariant: const Color(0xFF2E3038),
+      inverseSurface: const Color(0xFFF0F0F4),
+      onInverseSurface: _inkDark,
       surfaceTint: Colors.transparent,
       scrim: Colors.black,
     );
     if (black) {
       s = s.copyWith(
-        surface: const Color(0xFF000000),
+        surface: const Color(0xFF111111),
         surfaceContainerLowest: const Color(0xFF000000),
-        surfaceContainerLow: const Color(0xFF0A0A0A),
-        surfaceContainer: const Color(0xFF111111),
-        surfaceContainerHigh: const Color(0xFF191919),
-        surfaceContainerHighest: const Color(0xFF222222),
-        outline: const Color(0xFF2E2E2E),
-        outlineVariant: const Color(0xFF1E1E1E),
+        surfaceContainerLow: const Color(0xFF161616),
+        surfaceContainer: const Color(0xFF1C1C1C),
+        surfaceContainerHigh: const Color(0xFF242424),
+        surfaceContainerHighest: const Color(0xFF2E2E2E),
+        outline: const Color(0xFF3A3A3A),
+        outlineVariant: const Color(0xFF262626),
       );
     }
     return s;
   }
 
-  // ---- Accent resolution ----------------------------------------------------
+  static Color _canvas(Brightness b, bool black) => b == Brightness.light
+      ? const Color(0xFFF4F4F7)
+      : (black ? const Color(0xFF000000) : const Color(0xFF111216));
 
-  /// Two accents from one seed. The brand seed yields orange + blue; any other
-  /// seed yields the seed itself plus a deeper, slightly hue-shifted companion.
-  static (Color, Color) _accentsFor(Color seed) {
+  /// Accent fill and the peach/sky container pair for a seed. The brand seed
+  /// keeps the logo's orange + blue; other seeds derive a fill and a soft
+  /// container of their own hue (and a companion hue for "info").
+  static (Color, Color, Color, Color) _accentsFor(Color seed, Brightness b) {
+    final containers = _containers(b);
     if (seed.toARGB32() == AppColors.customSeed.toARGB32()) {
-      return (AppColors.orange, AppColors.blue);
+      return (
+        AppColors.orange,
+        AppColors.blue,
+        containers[Hue.peach]!,
+        containers[Hue.sky]!,
+      );
     }
     final hsl = HSLColor.fromColor(seed);
-    final a = hsl.withLightness(hsl.lightness.clamp(0.42, 0.58)).toColor();
-    final b = hsl
-        .withHue((hsl.hue + 24) % 360)
-        .withSaturation((hsl.saturation * 0.9).clamp(0.0, 1.0))
-        .withLightness(0.40)
+    final fill = hsl.withLightness(hsl.lightness.clamp(0.45, 0.6)).toColor();
+    final info = hsl.withHue((hsl.hue + 30) % 360).toColor();
+    final light = b == Brightness.light;
+    Color soft(HSLColor c) => c
+        .withSaturation((c.saturation * 0.85).clamp(0.35, 0.9))
+        .withLightness(light ? 0.80 : 0.68)
         .toColor();
-    return (a, b);
+    return (fill, info, soft(hsl), soft(HSLColor.fromColor(info)));
   }
-
-  static AppPalette _palette(Brightness b, ColorScheme scheme, Color seed) {
-    final (accent, info) = _accentsFor(seed);
-    final surface = scheme.surface;
-    final dark = b == Brightness.dark;
-    final tintAlpha = dark ? 0.20 : 0.12;
-
-    final accentInk = readableInk(accent, surface);
-    final infoInk = readableInk(info, surface);
-
-    final success = dark ? const Color(0xFF5FCB8A) : const Color(0xFF1E7F3F);
-    final warning = dark ? const Color(0xFFF0B860) : const Color(0xFF9A5B00);
-    final danger = dark ? const Color(0xFFF19A90) : const Color(0xFFC0392B);
-
-    final series = dark
-        ? <Color>[
-            accentInk,
-            infoInk,
-            const Color(0xFF7FA8F5),
-            const Color(0xFF5FCB8A),
-            const Color(0xFFB394F0),
-            const Color(0xFFF08BB5),
-            const Color(0xFF4FD1BF),
-            const Color(0xFF9CA3AF),
-          ]
-        : <Color>[
-            accentInk,
-            infoInk,
-            const Color(0xFF2F6FDE),
-            const Color(0xFF1F8A4C),
-            const Color(0xFF7C4DBF),
-            const Color(0xFFB23A6B),
-            const Color(0xFF0F8C7E),
-            const Color(0xFF6B7280),
-          ];
-
-    return AppPalette(
-      accent: accent,
-      onAccent: onColor(accent),
-      accentInk: accentInk,
-      accentTint: tintOf(accent, surface, alpha: tintAlpha),
-      info: info,
-      onInfo: onColor(info),
-      infoInk: infoInk,
-      infoTint: tintOf(info, surface, alpha: tintAlpha),
-      success: success,
-      successInk: readableInk(success, surface),
-      successTint: tintOf(success, surface, alpha: tintAlpha),
-      warning: warning,
-      warningInk: readableInk(warning, surface),
-      warningTint: tintOf(warning, surface, alpha: tintAlpha + 0.04),
-      danger: danger,
-      dangerInk: readableInk(danger, surface),
-      dangerTint: tintOf(danger, surface, alpha: tintAlpha),
-      series: series,
-    );
-  }
-
-  // ---- Build ----------------------------------------------------------------
 
   static ThemeData _build(Brightness brightness,
       {Color seed = AppColors.seed, bool black = false}) {
+    final dark = brightness == Brightness.dark;
     var scheme = _neutralScheme(brightness, black: black);
-    final p = _palette(brightness, scheme, seed);
+    final canvas = _canvas(brightness, black);
+    final (accent, info, accentContainer, infoContainer) =
+        _accentsFor(seed, brightness);
+    final containers = {
+      ..._containers(brightness),
+      Hue.peach: accentContainer,
+      Hue.sky: infoContainer,
+    };
+    final surface = scheme.surface;
+
+    final success = dark ? const Color(0xFF6FD08F) : const Color(0xFF17703A);
+    final warning = dark ? const Color(0xFFF2C063) : const Color(0xFF8A5300);
+    final danger = dark ? const Color(0xFFFF9C92) : const Color(0xFFC0392B);
+
+    final ink = dark ? const Color(0xFFF0F0F4) : _inkDark;
+    final p = AppPalette(
+      accent: accent,
+      onAccent: onColor(accent),
+      accentInk: readableInk(accent, surface),
+      infoInk: readableInk(info, surface),
+      successInk: readableInk(success, surface),
+      warningInk: readableInk(warning, surface),
+      dangerInk: readableInk(danger, surface),
+      ink: ink,
+      onInk: onColor(ink),
+      containers: containers,
+      onContainer: _inkDark,
+      canvas: canvas,
+      series: [
+        containers[Hue.peach]!,
+        containers[Hue.sky]!,
+        containers[Hue.lavender]!,
+        containers[Hue.mint]!,
+        containers[Hue.pink]!,
+        containers[Hue.lemon]!,
+        containers[Hue.aqua]!,
+        containers[Hue.rose]!,
+      ],
+    );
 
     scheme = scheme.copyWith(
       primary: p.accent,
       onPrimary: p.onAccent,
       primaryContainer: p.accentTint,
-      onPrimaryContainer: p.accentInk,
-      secondary: p.info,
-      onSecondary: p.onInfo,
+      onPrimaryContainer: p.onContainer,
+      secondary: info,
+      onSecondary: onColor(info),
       secondaryContainer: p.infoTint,
-      onSecondaryContainer: p.infoInk,
-      tertiary: p.info,
-      onTertiary: p.onInfo,
-      tertiaryContainer: p.infoTint,
-      onTertiaryContainer: p.infoInk,
+      onSecondaryContainer: p.onContainer,
+      tertiary: p.container(Hue.lavender),
+      onTertiary: p.onContainer,
+      tertiaryContainer: p.container(Hue.lavender),
+      onTertiaryContainer: p.onContainer,
       error: p.dangerInk,
       onError: onColor(p.dangerInk),
       errorContainer: p.dangerTint,
-      onErrorContainer: p.dangerInk,
+      onErrorContainer: p.onContainer,
       inversePrimary: p.accentTint,
     );
 
@@ -438,28 +452,28 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       brightness: brightness,
-      scaffoldBackgroundColor: scheme.surface,
+      scaffoldBackgroundColor: canvas,
+      canvasColor: canvas,
       splashFactory: InkSparkle.splashFactory,
       fontFamily: fontFamily,
       extensions: [p],
     );
-    final text = _typography(base.textTheme, scheme);
+    final text = _typography(scheme);
 
-    final controlShape =
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
-    const controlSize = Size(64, 44);
+    const pill = StadiumBorder();
+    const controlSize = Size(64, 48);
     final buttonText = text.labelLarge?.copyWith(fontWeight: FontWeight.w600);
 
-    OutlineInputBorder inputBorder(Color c, [double w = 1]) =>
+    OutlineInputBorder inputBorder(Color c, [double w = 1.5]) =>
         OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: c, width: w),
         );
 
     return base.copyWith(
       textTheme: text,
       primaryTextTheme: text,
-      iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
+      iconTheme: IconThemeData(color: scheme.onSurface, size: 22),
       dividerTheme: DividerThemeData(
           color: scheme.outlineVariant, thickness: 1, space: 1),
       pageTransitionsTheme: const PageTransitionsTheme(builders: {
@@ -471,15 +485,14 @@ class AppTheme {
         TargetPlatform.fuchsia: FadeForwardsPageTransitionsBuilder(),
       }),
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
+        backgroundColor: canvas,
         foregroundColor: scheme.onSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        centerTitle: false,
-        toolbarHeight: 56,
-        titleSpacing: Spacing.lg,
-        titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
+        centerTitle: true,
+        toolbarHeight: 64,
+        titleTextStyle: text.titleLarge,
         iconTheme: IconThemeData(color: scheme.onSurface, size: 22),
         actionsIconTheme: IconThemeData(color: scheme.onSurface, size: 22),
       ),
@@ -488,66 +501,45 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Radii.md),
-          side: BorderSide(color: scheme.outlineVariant),
-        ),
+            borderRadius: BorderRadius.circular(Radii.lg)),
         margin: EdgeInsets.zero,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surface,
-        surfaceTintColor: Colors.transparent,
-        indicatorColor: p.accentTint,
-        indicatorShape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.lg)),
+        backgroundColor: p.ink,
+        indicatorColor: p.onInk,
         elevation: 0,
-        height: 68,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-              size: 22,
-              color: states.contains(WidgetState.selected)
-                  ? p.accentInk
-                  : scheme.onSurfaceVariant,
-            )),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) =>
-            text.labelMedium!.copyWith(
-              color: states.contains(WidgetState.selected)
-                  ? scheme.onSurface
-                  : scheme.onSurfaceVariant,
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w600
-                  : FontWeight.w500,
-            )),
+        height: 64,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: scheme.surfaceContainerLow,
-        indicatorColor: p.accentTint,
-        indicatorShape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.lg)),
-        selectedIconTheme: IconThemeData(color: p.accentInk, size: 22),
+        backgroundColor: Colors.transparent,
+        indicatorColor: p.ink,
+        indicatorShape: const StadiumBorder(),
+        selectedIconTheme: IconThemeData(color: p.onInk, size: 22),
         unselectedIconTheme:
             IconThemeData(color: scheme.onSurfaceVariant, size: 22),
-        selectedLabelTextStyle: text.labelMedium!
+        selectedLabelTextStyle: text.labelLarge!
             .copyWith(color: scheme.onSurface, fontWeight: FontWeight.w600),
         unselectedLabelTextStyle:
-            text.labelMedium!.copyWith(color: scheme.onSurfaceVariant),
+            text.labelLarge!.copyWith(color: scheme.onSurfaceVariant),
         useIndicator: true,
-        minWidth: 80,
-        minExtendedWidth: 220,
+        minWidth: 88,
+        minExtendedWidth: 232,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: controlSize,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          shape: controlShape,
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.xl),
+          shape: pill,
           textStyle: buttonText,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: controlSize,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          shape: controlShape,
-          side: BorderSide(color: scheme.outline),
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.xl),
+          shape: pill,
+          side: BorderSide(color: scheme.outline, width: 1.2),
           foregroundColor: scheme.onSurface,
           textStyle: buttonText,
         ),
@@ -555,9 +547,9 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           minimumSize: const Size(48, 40),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          shape: controlShape,
-          foregroundColor: p.accentInk,
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+          shape: pill,
+          foregroundColor: scheme.onSurface,
           textStyle: buttonText,
         ),
       ),
@@ -568,108 +560,103 @@ class AppTheme {
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: p.accent,
-        foregroundColor: p.onAccent,
-        elevation: 1,
-        focusElevation: 1,
-        hoverElevation: 2,
-        highlightElevation: 1,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.lg)),
+        backgroundColor: p.ink,
+        foregroundColor: p.onInk,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: const StadiumBorder(),
         extendedTextStyle: buttonText,
       ),
       inputDecorationTheme: InputDecorationTheme(
-        filled: false,
+        filled: true,
+        fillColor: scheme.surface,
         isDense: false,
         contentPadding: const EdgeInsets.symmetric(
-            horizontal: Spacing.lg, vertical: 14),
-        border: inputBorder(scheme.outline),
-        enabledBorder: inputBorder(scheme.outline),
+            horizontal: Spacing.lg + 4, vertical: Spacing.lg),
+        border: inputBorder(scheme.outlineVariant),
+        enabledBorder: inputBorder(scheme.outlineVariant),
         disabledBorder: inputBorder(scheme.outlineVariant),
-        focusedBorder: inputBorder(p.accentInk, 1.5),
+        focusedBorder: inputBorder(p.ink, 2),
         errorBorder: inputBorder(p.dangerInk),
-        focusedErrorBorder: inputBorder(p.dangerInk, 1.5),
-        labelStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        focusedErrorBorder: inputBorder(p.dangerInk, 2),
+        labelStyle: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
         floatingLabelStyle:
-            text.labelMedium?.copyWith(color: p.accentInk),
-        hintStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-        helperStyle: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            text.labelLarge?.copyWith(color: scheme.onSurface),
+        hintStyle: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+        helperStyle: text.bodySmall,
         errorStyle: text.bodySmall?.copyWith(color: p.dangerInk),
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
       ),
       dropdownMenuTheme: DropdownMenuThemeData(
-        textStyle: text.bodyMedium,
+        textStyle: text.bodyLarge,
         menuStyle: MenuStyle(
           backgroundColor: WidgetStatePropertyAll(scheme.surface),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
           shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.md),
-            side: BorderSide(color: scheme.outlineVariant),
-          )),
+              borderRadius: BorderRadius.circular(Radii.md))),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: scheme.surface,
-        selectedColor: p.accentTint,
+        selectedColor: p.ink,
         disabledColor: scheme.surfaceContainer,
-        side: BorderSide(color: scheme.outline),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.sm)),
-        labelStyle: text.labelMedium?.copyWith(color: scheme.onSurface),
-        secondaryLabelStyle: text.labelMedium?.copyWith(color: p.accentInk),
-        checkmarkColor: p.accentInk,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        showCheckmark: true,
+        side: BorderSide(color: scheme.outlineVariant, width: 1.2),
+        shape: const StadiumBorder(),
+        labelStyle: text.labelLarge?.copyWith(color: scheme.onSurface),
+        secondaryLabelStyle: text.labelLarge?.copyWith(color: p.onInk),
+        checkmarkColor: p.onInk,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        showCheckmark: false,
       ),
       listTileTheme: ListTileThemeData(
-        contentPadding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
-        minVerticalPadding: 10,
-        iconColor: scheme.onSurfaceVariant,
-        titleTextStyle:
-            text.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-        subtitleTextStyle:
-            text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        contentPadding: const EdgeInsets.symmetric(horizontal: Spacing.lg + 4),
+        minVerticalPadding: 12,
+        iconColor: scheme.onSurface,
+        titleTextStyle: text.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+        subtitleTextStyle: text.bodySmall,
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? p.onAccent : scheme.outline),
+            s.contains(WidgetState.selected) ? p.onInk : scheme.outline),
         trackColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.selected)
-                ? p.accent
+                ? p.ink
                 : scheme.surfaceContainerHighest),
         trackOutlineColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? p.accent : scheme.outline),
+            s.contains(WidgetState.selected) ? p.ink : scheme.outline),
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? p.accentInk : Colors.transparent),
-        checkColor: WidgetStatePropertyAll(onColor(p.accentInk)),
+            s.contains(WidgetState.selected) ? p.ink : Colors.transparent),
+        checkColor: WidgetStatePropertyAll(p.onInk),
         side: BorderSide(color: scheme.outline, width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       sliderTheme: SliderThemeData(
-        activeTrackColor: p.accentInk,
+        activeTrackColor: p.ink,
         inactiveTrackColor: scheme.surfaceContainerHighest,
-        thumbColor: p.accentInk,
-        overlayColor: p.accentInk.withValues(alpha: 0.12),
-        valueIndicatorColor: scheme.inverseSurface,
-        valueIndicatorTextStyle:
-            text.labelMedium?.copyWith(color: scheme.onInverseSurface),
+        thumbColor: p.ink,
+        overlayColor: p.ink.withValues(alpha: 0.10),
+        valueIndicatorColor: p.ink,
+        valueIndicatorTextStyle: text.labelMedium?.copyWith(color: p.onInk),
+        trackHeight: 6,
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: p.accentInk,
-        linearTrackColor: scheme.surfaceContainerHighest,
+        color: p.accent,
+        linearTrackColor: scheme.surfaceContainerHigh,
         circularTrackColor: Colors.transparent,
+        linearMinHeight: 6,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: scheme.inverseSurface,
-        contentTextStyle:
-            text.bodyMedium?.copyWith(color: scheme.onInverseSurface),
-        actionTextColor: scheme.onInverseSurface,
+        backgroundColor: p.ink,
+        contentTextStyle: text.bodyMedium?.copyWith(color: p.onInk),
+        actionTextColor: p.container(Hue.peach),
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.sm)),
+            borderRadius: BorderRadius.circular(Radii.md)),
         insetPadding: const EdgeInsets.all(Spacing.lg),
       ),
       dialogTheme: DialogThemeData(
@@ -677,10 +664,8 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Radii.lg),
-          side: BorderSide(color: scheme.outlineVariant),
-        ),
-        titleTextStyle: text.titleMedium?.copyWith(color: scheme.onSurface),
+            borderRadius: BorderRadius.circular(Radii.lg)),
+        titleTextStyle: text.titleLarge,
         contentTextStyle:
             text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
       ),
@@ -691,68 +676,66 @@ class AppTheme {
         showDragHandle: true,
         dragHandleColor: scheme.outline,
         shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.lg))),
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(Radii.lg))),
         constraints: const BoxConstraints(maxWidth: 640),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: scheme.inverseSurface,
+          color: p.ink,
           borderRadius: BorderRadius.circular(Radii.xs),
         ),
-        textStyle: text.labelMedium?.copyWith(color: scheme.onInverseSurface),
+        textStyle: text.labelMedium?.copyWith(color: p.onInk),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: scheme.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Radii.md),
-          side: BorderSide(color: scheme.outlineVariant),
-        ),
+            borderRadius: BorderRadius.circular(Radii.md)),
         textStyle: text.bodyMedium,
       ),
       expansionTileTheme: ExpansionTileThemeData(
         shape: const Border(),
         collapsedShape: const Border(),
-        iconColor: scheme.onSurfaceVariant,
+        iconColor: scheme.onSurface,
         collapsedIconColor: scheme.onSurfaceVariant,
-        tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
+        tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.lg + 4),
       ),
     );
   }
 
-  /// Inter type scale. Weights are capped at 600; 700 is reserved for a single
-  /// key figure per screen. Letter-spacing is neutral throughout.
-  static TextTheme _typography(TextTheme base, ColorScheme scheme) {
+  /// Emphasized type scale in Google Sans Flex (rounded). Headlines are bold
+  /// and slightly tightened; body text is comfortable at 15/14 px.
+  static TextTheme _typography(ColorScheme scheme) {
     TextStyle s(double size, FontWeight w, double height,
-            {Color? color}) =>
+            {Color? color, double spacing = 0}) =>
         TextStyle(
           fontFamily: fontFamily,
           fontSize: size,
           fontWeight: w,
           height: height,
-          letterSpacing: 0,
+          letterSpacing: spacing,
           color: color ?? scheme.onSurface,
         );
     return TextTheme(
-      displayLarge: s(44, FontWeight.w600, 1.1),
-      displayMedium: s(36, FontWeight.w600, 1.1),
-      displaySmall: s(30, FontWeight.w600, 1.15),
-      headlineLarge: s(28, FontWeight.w600, 1.2),
-      headlineMedium: s(24, FontWeight.w600, 1.2),
-      headlineSmall: s(22, FontWeight.w600, 1.25),
-      titleLarge: s(20, FontWeight.w600, 1.3),
-      titleMedium: s(16, FontWeight.w600, 1.35),
-      titleSmall: s(14, FontWeight.w600, 1.35),
+      displayLarge: s(52, FontWeight.w700, 1.05, spacing: -1),
+      displayMedium: s(44, FontWeight.w700, 1.05, spacing: -0.8),
+      displaySmall: s(36, FontWeight.w700, 1.1, spacing: -0.6),
+      headlineLarge: s(32, FontWeight.w700, 1.15, spacing: -0.5),
+      headlineMedium: s(28, FontWeight.w700, 1.15, spacing: -0.4),
+      headlineSmall: s(24, FontWeight.w700, 1.2, spacing: -0.3),
+      titleLarge: s(20, FontWeight.w600, 1.25, spacing: -0.2),
+      titleMedium: s(17, FontWeight.w600, 1.3),
+      titleSmall: s(15, FontWeight.w600, 1.3),
       bodyLarge: s(16, FontWeight.w400, 1.45),
-      bodyMedium: s(14, FontWeight.w400, 1.45),
-      bodySmall: s(12, FontWeight.w400, 1.4, color: scheme.onSurfaceVariant),
-      labelLarge: s(14, FontWeight.w500, 1.3),
-      labelMedium: s(12, FontWeight.w500, 1.3),
-      labelSmall: s(11, FontWeight.w500, 1.3),
+      bodyMedium: s(15, FontWeight.w400, 1.45),
+      bodySmall: s(13, FontWeight.w400, 1.4, color: scheme.onSurfaceVariant),
+      labelLarge: s(15, FontWeight.w500, 1.3),
+      labelMedium: s(13, FontWeight.w500, 1.3),
+      labelSmall: s(12, FontWeight.w500, 1.3),
     );
   }
 }
 
-/// Tabular figures for numbers that should align in columns (money, GPA,
-/// countdowns).
+/// Tabular figures for numbers that should align in columns.
 const tabularFigures = [FontFeature.tabularFigures()];

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import 'app_icons.dart';
 
-/// A flat note: soft background, leading icon, optional title and action. Used
-/// for provenance ("Live from uiu.ac.bd"), caveats, and short instructions.
+/// A rounded note: pastel container (by tone) or white card (neutral), with a
+/// leading icon, optional title and action.
 class InfoNote extends StatelessWidget {
   final String text;
   final String? title;
@@ -25,22 +25,25 @@ class InfoNote extends StatelessWidget {
     final scheme = context.scheme;
     final p = context.palette;
     final neutral = tone == StatusTone.neutral;
-    final ink = neutral ? scheme.onSurfaceVariant : p.inkFor(tone, scheme);
-    final bg = neutral ? scheme.surfaceContainerLow : p.tintFor(tone, scheme);
+    final fg = neutral ? scheme.onSurface : p.onContainer;
+    final sub = neutral
+        ? scheme.onSurfaceVariant
+        : p.onContainer.withValues(alpha: 0.8);
+    final bg = neutral ? scheme.surface : p.tintFor(tone, scheme);
     return Container(
-      padding: const EdgeInsets.all(Spacing.md),
+      padding: const EdgeInsets.all(Spacing.lg),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(Radii.sm),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: Icon(icon, size: 18, color: ink),
+            child: Icon(icon, size: 20, color: fg),
           ),
-          const SizedBox(width: Spacing.sm),
+          const SizedBox(width: Spacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,15 +51,12 @@ class InfoNote extends StatelessWidget {
               children: [
                 if (title != null) ...[
                   Text(title!,
-                      style: context.text.titleSmall?.copyWith(
-                          color: neutral ? scheme.onSurface : ink)),
+                      style: context.text.titleSmall?.copyWith(color: fg)),
                   const SizedBox(height: Spacing.xxs),
                 ],
-                Text(text,
-                    style: context.text.bodySmall?.copyWith(
-                        color: neutral ? scheme.onSurfaceVariant : ink)),
+                Text(text, style: context.text.bodySmall?.copyWith(color: sub)),
                 if (action != null) ...[
-                  const SizedBox(height: Spacing.sm),
+                  const SizedBox(height: Spacing.md),
                   action!,
                 ],
               ],

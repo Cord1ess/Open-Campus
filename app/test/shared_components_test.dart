@@ -62,11 +62,22 @@ void main() {
       }
     });
 
-    test('type scale uses Inter with neutral tracking', () {
+    test('type scale uses Google Sans Flex with bold headlines', () {
       final t = AppTheme.light();
-      expect(t.textTheme.bodyMedium?.fontFamily, 'Inter');
-      expect(t.textTheme.titleLarge?.letterSpacing, 0);
-      expect(t.textTheme.titleLarge?.fontWeight, FontWeight.w600);
+      expect(t.textTheme.bodyMedium?.fontFamily, 'Google Sans Flex');
+      expect(t.textTheme.bodyMedium?.letterSpacing, 0);
+      expect(t.textTheme.headlineMedium?.fontWeight, FontWeight.w700);
+    });
+
+    test('text on every pastel container is readable (>= 4.5:1)', () {
+      for (final t in [AppTheme.light(), AppTheme.dark()]) {
+        final p = t.extension<AppPalette>()!;
+        for (final h in Hue.values) {
+          expect(contrastRatio(p.onContainer, p.container(h)),
+              greaterThanOrEqualTo(4.5),
+              reason: '$h');
+        }
+      }
     });
   });
 
@@ -161,7 +172,7 @@ void main() {
         StatBlock(label: 'C', value: '3'),
         StatBlock(label: 'D', value: '4'),
       ])));
-      expect(find.byType(StatBlock), findsNWidgets(4));
+      expect(find.text('D'), findsOneWidget);
       final a = tester.getTopLeft(find.text('A'));
       final c = tester.getTopLeft(find.text('C'));
       expect(c.dy, greaterThan(a.dy)); // C is on the second row
@@ -226,12 +237,14 @@ void main() {
   });
 
   group('StatusBadge', () {
-    testWidgets('renders label with the tone ink', (tester) async {
+    testWidgets('renders dark text on the tone container', (tester) async {
       await tester.pumpWidget(
           _wrap(const StatusBadge('Due', tone: StatusTone.warning)));
       final text = tester.widget<Text>(find.text('Due'));
-      final theme = AppTheme.light();
-      expect(text.style?.color, theme.extension<AppPalette>()!.warningInk);
+      final p = AppTheme.light().extension<AppPalette>()!;
+      expect(text.style?.color, p.onContainer);
+      expect(contrastRatio(p.onContainer, p.warningTint),
+          greaterThanOrEqualTo(4.5));
     });
   });
 }

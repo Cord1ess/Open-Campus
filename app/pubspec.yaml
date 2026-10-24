@@ -41,17 +41,17 @@ flutter:
   assets:
     - assets/brand/
   fonts:
-    # Inter, bundled as static weights (no italics) so the whole app renders in
-    # one consistent typeface on every platform — no runtime font fetch.
-    - family: Inter
+    # Google Sans Flex (SIL OFL 1.1, see assets/fonts/GoogleSansFlex-OFL.txt),
+    # bundled as static instances of the variable font with the Roundedness
+    # axis at 100 and subset to Latin, so the app renders in one friendly
+    # rounded typeface on every platform with no runtime font fetch.
+    - family: Google Sans Flex
       fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/GoogleSansFlex-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Inter-Medium.ttf
+        - asset: assets/fonts/GoogleSansFlex-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
+        - asset: assets/fonts/GoogleSansFlex-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/Inter-Bold.ttf
+        - asset: assets/fonts/GoogleSansFlex-Bold.ttf
           weight: 700
-        - asset: assets/fonts/Inter-ExtraBold.ttf
-          weight: 800

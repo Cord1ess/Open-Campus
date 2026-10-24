@@ -25,8 +25,8 @@ class ProfileButton extends ConsumerWidget {
           onTap: () =>
               Navigator.of(context).push(appRoute(const ProfilePage())),
           child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Avatar(bytes: bytes, radius: 16),
+            padding: const EdgeInsets.all(2),
+            child: Avatar(bytes: bytes, radius: 20),
           ),
         ),
       ),

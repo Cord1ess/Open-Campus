@@ -37,7 +37,7 @@ class SimpleTable extends StatelessWidget {
     final isNum = numeric ?? [for (var i = 0; i < n; i++) i > 0];
 
     TableRow headerRow() => TableRow(
-          decoration: BoxDecoration(color: scheme.surfaceContainerLow),
+          decoration: BoxDecoration(color: scheme.surfaceContainer),
           children: [
             for (var c = 0; c < n; c++)
               _cell(
@@ -90,8 +90,8 @@ class SimpleTable extends StatelessWidget {
     return LayoutBuilder(builder: (context, c) {
       final needed = n * minColumnWidth;
       final decoration = BoxDecoration(
-        borderRadius: BorderRadius.circular(Radii.sm),
-        border: Border.all(color: scheme.outlineVariant),
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(Radii.md),
       );
       if (c.maxWidth.isFinite && needed <= c.maxWidth) {
         // Flex: first column takes the slack, numeric columns size to content.
@@ -123,7 +123,7 @@ class SimpleTable extends StatelessWidget {
       {TextStyle? style, bool right = false, bool header = false}) {
     return Padding(
       padding: EdgeInsets.symmetric(
-          horizontal: Spacing.md, vertical: header ? Spacing.sm : 10),
+          horizontal: Spacing.lg, vertical: header ? 10 : 12),
       child: Text(text,
           textAlign: right ? TextAlign.right : TextAlign.left,
           maxLines: 2,

@@ -10,10 +10,10 @@ class SegmentOption<T> {
   const SegmentOption(this.value, this.label, {this.icon, this.enabled = true});
 }
 
-/// The one segmented control: a low container with the selected segment lifted
-/// to the surface. [expand] fills the available width (2–4 options); when false
-/// the control sizes to its content and scrolls horizontally (many options,
-/// e.g. a trimester picker). 36-px tall so it never dominates a desktop page.
+/// Pill segmented control: a white track with the selected option as a dark
+/// ink pill (Expressive "connected button group"). [expand] fills the width
+/// (2–4 options); when false the options size to content and scroll
+/// horizontally (e.g. a trimester picker).
 class SegmentedControl<T> extends StatelessWidget {
   final List<SegmentOption<T>> options;
   final T value;
@@ -31,19 +31,23 @@ class SegmentedControl<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final segments = <Widget>[
-      for (final o in options)
+      for (var i = 0; i < options.length; i++) ...[
+        if (!expand && i > 0) const SizedBox(width: Spacing.xs),
         _Segment<T>(
-          option: o,
-          selected: o.value == value,
+          option: options[i],
+          selected: options[i].value == value,
           expand: expand,
-          onTap: o.enabled && o.value != value ? () => onChanged(o.value) : null,
+          onTap: options[i].enabled && options[i].value != value
+              ? () => onChanged(options[i].value)
+              : null,
         ),
+      ],
     ];
     final bar = Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(10),
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(Radii.full),
       ),
       child: Row(
         mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
@@ -51,10 +55,7 @@ class SegmentedControl<T> extends StatelessWidget {
       ),
     );
     if (expand) return bar;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: bar,
-    );
+    return SingleChildScrollView(scrollDirection: Axis.horizontal, child: bar);
   }
 }
 
@@ -73,11 +74,12 @@ class _Segment<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final p = context.palette;
     final enabled = option.enabled;
     final fg = !enabled
         ? scheme.onSurfaceVariant.withValues(alpha: 0.45)
         : selected
-            ? scheme.onSurface
+            ? p.onInk
             : scheme.onSurfaceVariant;
     final child = Semantics(
       button: true,
@@ -85,25 +87,23 @@ class _Segment<T> extends StatelessWidget {
       enabled: enabled,
       label: option.label,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(Radii.full),
         onTap: onTap,
         child: AnimatedContainer(
           duration: Motion.fast,
           curve: Motion.emphasized,
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
           decoration: BoxDecoration(
-            color: selected ? scheme.surface : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: selected ? scheme.outlineVariant : Colors.transparent),
+            color: selected ? p.ink : Colors.transparent,
+            borderRadius: BorderRadius.circular(Radii.full),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (option.icon != null) ...[
-                Icon(option.icon, size: 16, color: fg),
+                Icon(option.icon, size: 18, color: fg),
                 const SizedBox(width: 6),
               ],
               Flexible(

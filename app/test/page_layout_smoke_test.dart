@@ -380,7 +380,7 @@ void main() {
     for (final size in [_sizes['phone']!, _sizes['desktop']!]) {
       await _pump(tester, const AppShell(), size);
       for (final label in ['Academics', 'Finance', 'Services', 'Home']) {
-        await tester.tap(find.text(label).first);
+        await tester.tap(find.byTooltip(label).first);
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.takeException(), isNull, reason: 'tab $label');
       }
@@ -390,7 +390,7 @@ void main() {
   testWidgets('Dashboard shows the time-sensitive sections and figures',
       (tester) async {
     await _pump(tester, const AppShell(), _sizes['phone']!);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Your classes today'), findsOneWidget);
     expect(find.text('Upcoming'), findsOneWidget);
     expect(find.text('CGPA'), findsOneWidget);
     expect(find.text('3.67'), findsWidgets);
@@ -418,7 +418,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull);
     for (final label in ['Academics', 'Finance', 'Services']) {
-      await tester.tap(find.text(label).first);
+      await tester.tap(find.byTooltip(label).first);
       await tester.pump(const Duration(milliseconds: 300));
       expect(tester.takeException(), isNull, reason: 'tab $label at 1.3x');
     }
