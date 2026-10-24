@@ -3,14 +3,15 @@ import 'package:flutter/rendering.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets.dart';
-import '../common/collapsing_title.dart';
 import 'image_export.dart';
 import 'schedule_calendar.dart';
 import 'section_catalog_model.dart';
+import 'section_widgets.dart';
 import 'simulator_engine.dart';
 
-/// Full-screen detail for one built schedule: the weekly calendar grid, a
-/// course legend, the per-class list, and any trade-offs. Exportable as an image.
+/// Full-screen detail for one built schedule: status, the weekly calendar grid
+/// with a course legend, the per-class list, and any trade-offs. Exportable as
+/// an image.
 class ScheduleDetailPage extends StatefulWidget {
   final ScheduleCandidate candidate;
   final int rank;
@@ -56,16 +57,16 @@ class _ScheduleDetailPageState extends State<ScheduleDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
     final c = widget.candidate;
 
-    // Course color legend, matching the calendar's per-course palette order.
+    // Course legend order = the calendar's first-seen colour assignment.
     final courseOrder = <String, String>{}; // code -> name
     for (final p in c.picks) {
       courseOrder.putIfAbsent(p.formalCode, () => p.courseName ?? p.formalCode);
     }
 
-    return Scaffold(
+    return PageScaffold(
+      title: 'Schedule ${widget.rank}',
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _exporting ? null : _export,
         icon: _exporting
@@ -73,58 +74,56 @@ class _ScheduleDetailPageState extends State<ScheduleDetailPage> {
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.ios_share),
+            : const Icon(AppIcons.export),
         label: const Text('Export'),
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverCollapsingAppBar(title: 'Schedule ${widget.rank}'),
-          SliverPadding(
-            padding: const EdgeInsets.all(Spacing.lg),
-            sliver: SliverList.list(children: [
-              _StatusHeader(c),
-              const SizedBox(height: Spacing.md),
-              // The calendar itself, wrapped so export captures grid + legend.
-              RepaintBoundary(
-                key: _calKey,
-                child: Container(
-                  padding: const EdgeInsets.all(Spacing.md),
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    borderRadius: BorderRadius.circular(Radii.lg),
-                    border: Border.all(color: scheme.outlineVariant),
+      body: Stacked(
+        gap: Spacing.lg,
+        children: [
+          _StatusHeader(c),
+          RepaintBoundary(
+            key: _calKey,
+            child: Panel(
+              padding: const EdgeInsets.all(Spacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 460,
+                    child: ScheduleCalendarView(candidate: c),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        height: 460,
-                        child: ScheduleCalendarView(candidate: c),
-                      ),
-                      const SizedBox(height: Spacing.md),
-                      _Legend(courseOrder: courseOrder),
-                      const SizedBox(height: Spacing.xs),
-                      Text('Open Campus · ${widget.trimester ?? "schedule"}',
-                          style: context.text.labelSmall
-                              ?.copyWith(color: scheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
+                  const SizedBox(height: Spacing.md),
+                  _Legend(courseOrder: courseOrder),
+                  const SizedBox(height: Spacing.xs),
+                  Text('Open Campus · ${widget.trimester ?? "schedule"}',
+                      style: context.text.labelSmall
+                          ?.copyWith(color: context.scheme.onSurfaceVariant)),
+                ],
               ),
-              const SizedBox(height: Spacing.lg),
-              _ClassList(c),
-              if (c.sacrifices.isNotEmpty) ...[
-                const SizedBox(height: Spacing.lg),
-                _Tradeoffs(c.sacrifices),
-              ],
-              const SizedBox(height: 120),
-            ]),
+            ),
           ),
+          const SizedBox(height: Spacing.sm),
+          _ClassList(c),
+          if (c.sacrifices.isNotEmpty)
+            InfoNote(
+              title: 'Trade-offs',
+              tone: StatusTone.warning,
+              icon: AppIcons.warning,
+              text: c.sacrifices.join('\n'),
+            ),
         ],
       ),
     );
   }
 }
+
+StatusTone scheduleTone(ScheduleCandidate c) => c.isPerfect
+    ? StatusTone.accent
+    : (c.conflictFree ? StatusTone.success : StatusTone.danger);
+
+String scheduleLabel(ScheduleCandidate c) => c.isPerfect
+    ? 'Perfect match'
+    : (c.conflictFree ? 'Conflict-free' : 'Has a time clash');
 
 class _StatusHeader extends StatelessWidget {
   final ScheduleCandidate c;
@@ -132,44 +131,15 @@ class _StatusHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final perfect = c.isPerfect;
-    final accent = perfect
-        ? scheme.primary
-        : (c.conflictFree ? scheme.secondary : scheme.error);
-    final label = perfect
-        ? 'Perfect match'
-        : c.conflictFree
-            ? 'Conflict-free'
-            : 'Has a time clash';
+    final days = c.daysOnCampus.length;
     return Row(
       children: [
-        Icon(
-            perfect
-                ? Icons.verified
-                : c.conflictFree
-                    ? Icons.check_circle
-                    : Icons.warning_amber_rounded,
-            color: accent,
-            size: 20),
-        const SizedBox(width: Spacing.sm),
-        Text(label,
-            style: context.text.titleMedium
-                ?.copyWith(color: accent, fontWeight: FontWeight.w800)),
+        StatusBadge(scheduleLabel(c), tone: scheduleTone(c)),
         const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            c.daysOnCampus.isEmpty
-                ? '—'
-                : '${c.daysOnCampus.length} day${c.daysOnCampus.length == 1 ? "" : "s"} / week',
-            style: context.text.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
-          ),
+        Text(
+          days == 0 ? '—' : '$days day${days == 1 ? "" : "s"} / week',
+          style: context.text.labelMedium
+              ?.copyWith(color: context.scheme.onSurfaceVariant),
         ),
       ],
     );
@@ -182,39 +152,21 @@ class _Legend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    // Mirror the calendar palette order (first-seen course = first color).
-    final palette = [
-      scheme.primary,
-      scheme.tertiary,
-      const Color(0xFF3B82F6),
-      const Color(0xFF10B981),
-      const Color(0xFFF59E0B),
-      const Color(0xFF8B5CF6),
-      const Color(0xFFEC4899),
-      const Color(0xFF14B8A6),
-    ];
+    final series = context.palette.series;
     var i = 0;
     return Wrap(
-      spacing: Spacing.md,
+      spacing: Spacing.lg,
       runSpacing: Spacing.xs,
       children: [
         for (final entry in courseOrder.entries)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: palette[i++ % palette.length],
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(width: 5),
+              StatusDot(series[i++ % series.length], size: 10),
+              const SizedBox(width: Spacing.xs + Spacing.xxs),
               Text(entry.value,
-                  style: context.text.labelSmall?.copyWith(
-                      color: scheme.onSurface, fontWeight: FontWeight.w600)),
+                  style: context.text.labelMedium
+                      ?.copyWith(color: context.scheme.onSurface)),
             ],
           ),
       ],
@@ -228,19 +180,9 @@ class _ClassList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SectionCard(
+    return RowGroup(
       title: 'Your classes',
-      icon: Icons.list_alt_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < c.picks.length; i++) ...[
-            if (i > 0) Divider(height: Spacing.lg, color: scheme.outlineVariant),
-            _ClassRow(c.picks[i]),
-          ],
-        ],
-      ),
+      children: [for (final p in c.picks) _ClassRow(p)],
     );
   }
 }
@@ -252,88 +194,51 @@ class _ClassRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final p = context.palette;
     final s = pick.section;
     final scheduled = s.section != null && s.schedule.isNotEmpty;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(pick.courseName ?? pick.formalCode,
-                  style: context.text.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-            ),
-            if (s.section != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text('Section ${s.section}',
-                    style: context.text.labelSmall?.copyWith(
-                        color: scheme.primary, fontWeight: FontWeight.w800)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 3),
-        if (!scheduled)
-          Text('No fitting section / no fixed time',
-              style: context.text.bodySmall?.copyWith(color: scheme.error))
-        else ...[
-          Text(s.facultyName ?? s.facultyCode ?? 'Faculty TBA',
-              style: context.text.bodyMedium),
-          const SizedBox(height: 2),
-          for (final slot in s.schedule)
-            Row(
-              children: [
-                Icon(Icons.schedule, size: 13, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 5),
-                Text(
-                  '${slot.day}  ·  ${to12h(slot.start)} – ${to12h(slot.end)}'
-                  '${s.room != null ? "  ·  Room ${s.room}" : ""}',
-                  style: context.text.bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-class _Tradeoffs extends StatelessWidget {
-  final List<String> sacrifices;
-  const _Tradeoffs(this.sacrifices);
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SectionCard(
-      title: 'Trade-offs',
-      icon: Icons.info_outline,
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+          horizontal: Spacing.lg, vertical: Spacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final s in sacrifices)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.remove_circle_outline,
-                      size: 15, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: Spacing.sm),
-                  Expanded(
-                    child: Text(s,
-                        style: context.text.bodySmall
-                            ?.copyWith(color: scheme.onSurface, height: 1.35)),
-                  ),
-                ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(pick.courseName ?? pick.formalCode,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w500)),
+                    if (scheduled)
+                      Text(s.facultyName ?? s.facultyCode ?? 'Faculty TBA',
+                          style: context.text.bodySmall),
+                  ],
+                ),
               ),
-            ),
+              if (s.section != null) ...[
+                const SizedBox(width: Spacing.md),
+                StatusBadge('Sec ${s.section}', tone: StatusTone.accent),
+              ],
+            ],
+          ),
+          const SizedBox(height: Spacing.xs),
+          if (!scheduled)
+            Text('No fitting section / no fixed time',
+                style: context.text.bodySmall?.copyWith(color: p.dangerInk))
+          else
+            for (final slot in s.schedule)
+              Text(
+                '${shortDay(slot.day)} · ${to12h(slot.start)} – ${to12h(slot.end)}'
+                '${s.room != null ? " · Room ${s.room}" : ""}',
+                style: context.text.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
         ],
       ),
     );

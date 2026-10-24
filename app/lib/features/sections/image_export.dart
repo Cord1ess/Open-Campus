@@ -25,7 +25,7 @@ Future<bool> exportBoundaryPng(
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     if (data == null) return false;
     final bytes = data.buffer.asUint8List();
-    return savePng(bytes, filename);
+    return await savePng(bytes, filename);
   } catch (_) {
     return false;
   }
