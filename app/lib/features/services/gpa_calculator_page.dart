@@ -11,9 +11,8 @@ import 'gpa_widgets.dart';
 import 'tool_scaffold.dart';
 
 /// GPA Tool — Auto (computed from your live UCAM course history) + Manual
-/// (hand-input, ported from the reference calculator). Both offer a CGPA
-/// calculator and a target-CGPA planner; Auto adds running-course projection and
-/// retake impact from real data.
+/// (hand-input). Both offer a CGPA calculator and a target-CGPA planner; Auto
+/// adds running-course projection and retake impact from real data.
 class GpaCalculatorPage extends ConsumerStatefulWidget {
   const GpaCalculatorPage({super.key});
 
@@ -49,18 +48,14 @@ class _AutoGpa extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(courseHistoryProvider);
-    return switch (state) {
-      ResLoading() => const CardSkeleton(lines: 8),
-      ResError(:final message) => StateMessage(
-          icon: Icons.cloud_off,
-          title: 'Couldn’t load your course history',
-          subtitle: message,
-          actionLabel: 'Try again',
-          onAction: () =>
-              ref.read(courseHistoryProvider.notifier).load(force: true),
-        ),
-      ResData(:final loaded) => _AutoGpaBody(loaded.data),
-    };
+    return ResourceBody<CourseHistoryData>(
+      state: state,
+      loadingLabel: 'Loading your course history…',
+      errorTitle: 'Couldn’t load your course history',
+      onRetry: () =>
+          ref.read(courseHistoryProvider.notifier).load(force: true),
+      builder: (d) => _AutoGpaBody(d),
+    );
   }
 }
 
@@ -75,20 +70,27 @@ class _AutoGpaBody extends StatelessWidget {
     final degreeReq = data.degreeRequirement;
 
     if (cgpa == null || completed == null) {
-      return const StateMessage(
-        icon: Icons.school_outlined,
+      return const EmptyState(
+        icon: AppIcons.results,
         title: 'No standing data yet',
-        subtitle: 'Open Course History once so we can read your CGPA and credits.',
+        message:
+            'Open Course Grades once so we can read your CGPA and credits.',
       );
     }
 
-    // Running (in-progress, ungraded) courses for the projection.
     final running = data.courses.where((c) => c.isRunning).toList();
-    // Retake detection: course codes that appear more than once.
     final retakes = _detectRetakes(data.courses);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final standing = _CurrentStanding(
+        cgpa: cgpa, completed: completed, degreeReq: degreeReq);
+    final planner = TargetPlannerCard(
+      currentCgpa: cgpa,
+      completedCredits: completed,
+      degreeRequirement: degreeReq,
+      autoFilled: true,
+    );
+
+    return Stacked(
       children: [
         DataUsedPanel(rows: [
           ('Current CGPA', cgpa.toStringAsFixed(2)),
@@ -99,39 +101,17 @@ class _AutoGpaBody extends StatelessWidget {
           ('Running (ungraded) now', '${running.length}'),
           if (retakes.isNotEmpty) ('Repeated courses found', '${retakes.length}'),
         ]),
-        const SizedBox(height: Spacing.lg),
-        FadeSlideIn(
-          child: _CurrentStandingCard(
-              cgpa: cgpa, completed: completed, degreeReq: degreeReq),
-        ),
-        if (running.isNotEmpty) ...[
-          const SizedBox(height: Spacing.lg),
-          FadeSlideIn(
-            delayMs: 60,
-            child: _RunningProjectionCard(
-                running: running, cgpa: cgpa, completed: completed),
-          ),
-        ],
-        const SizedBox(height: Spacing.lg),
-        FadeSlideIn(
-          delayMs: 120,
-          child: TargetPlannerCard(
-            currentCgpa: cgpa,
-            completedCredits: completed,
-            degreeRequirement: degreeReq,
-            autoFilled: true,
-          ),
-        ),
-        if (retakes.isNotEmpty) ...[
-          const SizedBox(height: Spacing.lg),
-          FadeSlideIn(delayMs: 160, child: _RetakeImpactCard(retakes)),
-        ],
+        standing,
+        if (running.isNotEmpty)
+          _RunningProjection(running: running, cgpa: cgpa, completed: completed),
+        planner,
+        if (retakes.isNotEmpty) _RetakeImpact(retakes),
       ],
     );
   }
 
   /// Group graded attempts by course code; any code with 2+ graded attempts is a
-  /// retake. Returns [(code, name, attempts-sorted-old→new)].
+  /// retake. Attempts are sorted old→new.
   List<_RetakeGroup> _detectRetakes(List<HistoryCourse> courses) {
     final byCode = <String, List<HistoryCourse>>{};
     for (final c in courses) {
@@ -141,9 +121,8 @@ class _AutoGpaBody extends StatelessWidget {
     final out = <_RetakeGroup>[];
     byCode.forEach((code, attempts) {
       if (attempts.length < 2) return;
-      // Sort chronologically by the trimester's numeric code so `attempts.first`
-      // is genuinely the earliest attempt (the display reads "first → best").
-      attempts.sort((a, b) => _trimCode(a.trimester).compareTo(_trimCode(b.trimester)));
+      attempts.sort(
+          (a, b) => _trimCode(a.trimester).compareTo(_trimCode(b.trimester)));
       out.add(_RetakeGroup(
         code: code,
         name: attempts.first.courseName ?? code,
@@ -153,7 +132,6 @@ class _AutoGpaBody extends StatelessWidget {
     return out;
   }
 
-  /// Leading numeric code of a trimester string (e.g. "233" → 233), for sorting.
   static int _trimCode(String? t) {
     if (t == null) return -1;
     final m = RegExp(r'\d+').firstMatch(t);
@@ -168,84 +146,57 @@ class _RetakeGroup {
   _RetakeGroup({required this.code, required this.name, required this.attempts});
 }
 
-class _CurrentStandingCard extends StatelessWidget {
+class _CurrentStanding extends StatelessWidget {
   final double cgpa;
   final double completed;
   final double? degreeReq;
-  const _CurrentStandingCard(
+  const _CurrentStanding(
       {required this.cgpa, required this.completed, required this.degreeReq});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
     final remaining =
         degreeReq != null ? (degreeReq! - completed).clamp(0, degreeReq!) : null;
-    return SectionCard(
+    return Section(
       title: 'Your standing',
-      icon: Icons.school_outlined,
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: scheme.primary,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text('CGPA ${cgpa.toStringAsFixed(2)}',
-            style: context.text.labelLarge?.copyWith(
-                color: onAccent(scheme.primary), fontWeight: FontWeight.w800)),
-      ),
-      child: Column(
-        children: [
-          _kv(context, 'Completed credits', completed.toStringAsFixed(1)),
-          if (degreeReq != null)
-            _kv(context, 'Degree requirement', degreeReq!.toStringAsFixed(0)),
-          if (remaining != null)
-            _kv(context, 'Remaining', '${remaining.toStringAsFixed(0)} cr'),
-        ],
-      ),
+      child: StatStrip(items: [
+        StatBlock(label: 'CGPA', value: cgpa.toStringAsFixed(2), large: true),
+        StatBlock(label: 'Completed', value: '${completed.toStringAsFixed(1)} cr'),
+        if (degreeReq != null)
+          StatBlock(
+              label: 'Degree requirement',
+              value: '${degreeReq!.toStringAsFixed(0)} cr'),
+        if (remaining != null)
+          StatBlock(
+              label: 'Remaining', value: '${remaining.toStringAsFixed(0)} cr'),
+      ]),
     );
   }
-
-  Widget _kv(BuildContext context, String k, String v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: [
-          Expanded(
-              child: Text(k,
-                  style: context.text.bodyMedium
-                      ?.copyWith(color: context.scheme.onSurfaceVariant))),
-          Text(v,
-              style: context.text.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-        ]),
-      );
 }
 
 /// Lets the user assign expected grades to their in-progress courses and shows
 /// the projected trimester GPA + new CGPA.
-class _RunningProjectionCard extends StatefulWidget {
+class _RunningProjection extends StatefulWidget {
   final List<HistoryCourse> running;
   final double cgpa;
   final double completed;
-  const _RunningProjectionCard(
+  const _RunningProjection(
       {required this.running, required this.cgpa, required this.completed});
 
   @override
-  State<_RunningProjectionCard> createState() => _RunningProjectionCardState();
+  State<_RunningProjection> createState() => _RunningProjectionState();
 }
 
-class _RunningProjectionCardState extends State<_RunningProjectionCard> {
-  // Expected grade point per running course, keyed by LIST INDEX (not course
-  // code/name — two running courses with a blank or duplicate code would
-  // otherwise share one entry and move together). null = not yet chosen.
+class _RunningProjectionState extends State<_RunningProjection> {
+  // Expected grade point per running course, keyed by LIST INDEX so duplicate
+  // or blank codes never share an entry. null = not yet chosen.
   late final Map<int, double?> _expected = {
     for (var i = 0; i < widget.running.length; i++) i: 4.0,
   };
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    // Only project courses whose credit is known — fabricating a credit would
-    // silently produce wrong quality points. Courses with an unknown credit are
-    // shown but excluded from the number, with a note below.
+    // Only project courses whose credit is known.
     var unknownCredits = 0;
     final picked = <({double credit, double? point})>[];
     for (var i = 0; i < widget.running.length; i++) {
@@ -268,65 +219,45 @@ class _RunningProjectionCardState extends State<_RunningProjectionCard> {
             trimesterCredits: trimCredits,
           );
 
-    return SectionCard(
+    return Section(
       title: 'This trimester’s projection',
-      icon: Icons.trending_up_outlined,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Set the grade you expect in each in-progress course:',
-              style: context.text.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
+              style: context.text.bodySmall),
           const SizedBox(height: Spacing.sm),
-          for (var i = 0; i < widget.running.length; i++) ...[
-            _RunningRow(
-              course: widget.running[i],
-              value: _expected[i],
-              onChanged: (v) => setState(() => _expected[i] = v),
-            ),
-            Divider(height: Spacing.lg, color: scheme.outlineVariant),
-          ],
+          RowGroup(
+            children: [
+              for (var i = 0; i < widget.running.length; i++)
+                _RunningRow(
+                  course: widget.running[i],
+                  value: _expected[i],
+                  onChanged: (v) => setState(() => _expected[i] = v),
+                ),
+            ],
+          ),
           if (unknownCredits > 0)
             Padding(
-              padding: const EdgeInsets.only(top: Spacing.xs),
+              padding: const EdgeInsets.only(top: Spacing.sm),
               child: Text(
                   '$unknownCredits course${unknownCredits == 1 ? '' : 's'} with an '
                   'unknown credit ${unknownCredits == 1 ? 'is' : 'are'} excluded '
                   'from this projection.',
-                  style: context.text.labelSmall
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
+                  style: context.text.bodySmall),
             ),
-          Row(
-            children: [
-              Expanded(
-                child: _stat(context, 'Projected GPA',
-                    trimGpa?.toStringAsFixed(2) ?? '—'),
-              ),
-              Expanded(
-                child: _stat(context, 'New CGPA', newCgpa.toStringAsFixed(2),
-                    accent: true),
-              ),
-            ],
-          ),
+          const SizedBox(height: Spacing.md),
+          StatStrip(bordered: false, items: [
+            StatBlock(
+                label: 'Projected GPA',
+                value: trimGpa?.toStringAsFixed(2) ?? '—'),
+            StatBlock(
+                label: 'New CGPA',
+                value: newCgpa.toStringAsFixed(2),
+                valueColor: context.palette.accentInk),
+          ]),
         ],
       ),
-    );
-  }
-
-  Widget _stat(BuildContext context, String label, String value,
-      {bool accent = false}) {
-    final scheme = context.scheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: context.text.labelMedium
-                ?.copyWith(color: scheme.onSurfaceVariant)),
-        Text(value,
-            style: context.text.headlineSmall?.copyWith(
-                color: accent ? scheme.primary : scheme.onSurface,
-                fontWeight: FontWeight.w800)),
-      ],
     );
   }
 }
@@ -340,69 +271,47 @@ class _RunningRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(course.courseName ?? course.courseCode ?? 'Course',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.text.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              Text(
-                  '${course.courseCode ?? ''}'
-                  '${course.credit != null ? ' · ${course.credit!.toStringAsFixed(1)} cr' : ''}',
-                  style: context.text.labelSmall
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-          ),
-        ),
-        const SizedBox(width: Spacing.sm),
-        GradeDropdown(value: value, onChanged: onChanged),
-      ],
+    final sub = [
+      if (course.courseCode != null) course.courseCode!,
+      if (course.credit != null) '${course.credit!.toStringAsFixed(1)} cr',
+    ].join(' · ');
+    return ListRow(
+      title: course.courseName ?? course.courseCode ?? 'Course',
+      subtitle: sub.isEmpty ? null : sub,
+      trailing: GradeDropdown(value: value, onChanged: onChanged),
     );
   }
 }
 
-class _RetakeImpactCard extends StatelessWidget {
+class _RetakeImpact extends StatelessWidget {
   final List<_RetakeGroup> retakes;
-  const _RetakeImpactCard(this.retakes);
+  const _RetakeImpact(this.retakes);
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SectionCard(
+    return Section(
       title: 'Retake impact',
-      icon: Icons.replay_outlined,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
               'UIU counts the higher grade for a repeated course. Here’s how '
               'your retakes moved your quality points:',
-              style: context.text.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
+              style: context.text.bodySmall),
           const SizedBox(height: Spacing.sm),
-          for (var i = 0; i < retakes.length; i++) ...[
-            if (i > 0)
-              Divider(height: Spacing.lg, color: scheme.outlineVariant),
-            _retakeRow(context, retakes[i]),
-          ],
+          RowGroup(children: [for (final g in retakes) _retakeRow(context, g)]),
         ],
       ),
     );
   }
 
   Widget _retakeRow(BuildContext context, _RetakeGroup g) {
-    final scheme = context.scheme;
-    // Best vs. first attempt (attempts are now sorted old→new).
+    final p = context.palette;
     final first = g.attempts.first;
-    final best = g.attempts.reduce((a, b) => (a.point ?? 0) >= (b.point ?? 0) ? a : b);
-    // Retakes almost always carry a credit; only assume the common 3-credit
-    // default as a last resort when UCAM omitted it for every attempt.
+    final best =
+        g.attempts.reduce((a, b) => (a.point ?? 0) >= (b.point ?? 0) ? a : b);
+    // Retakes almost always carry a credit; assume the common 3-credit default
+    // only as a last resort.
     const kAssumedCredit = 3.0;
     final credit = best.credit ?? first.credit ?? kAssumedCredit;
     final impact = retakeImpact(
@@ -411,58 +320,37 @@ class _RetakeImpactCard extends StatelessWidget {
       credit: credit,
     );
     final improved = impact.improved;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(g.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.text.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              Text(
-                  '${g.code} · ${first.grade ?? '?'} → ${best.grade ?? '?'} '
-                  '(${g.attempts.length} attempts)',
-                  style: context.text.labelSmall
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-          ),
-        ),
-        const SizedBox(width: Spacing.sm),
-        Text(
-          improved
-              ? '+${impact.countedImprovement.toStringAsFixed(2)} qp'
-              : 'no loss',
-          style: context.text.bodyMedium?.copyWith(
-              color: improved ? context.status.good : scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700),
-        ),
-      ],
+    return ListRow(
+      title: g.name,
+      subtitle: '${g.code} · ${first.grade ?? '?'} → ${best.grade ?? '?'} '
+          '(${g.attempts.length} attempts)',
+      trailing: Text(
+        improved
+            ? '+${impact.countedImprovement.toStringAsFixed(2)} qp'
+            : 'no loss',
+        style: context.text.labelLarge?.copyWith(
+            color: improved ? p.successInk : context.scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+            fontFeatures: tabularFigures),
+      ),
     );
   }
 }
 
 // ===========================================================================
-// MANUAL — ported reference calculator (hand input).
+// MANUAL — hand input.
 // ===========================================================================
 class _ManualGpa extends StatelessWidget {
   const _ManualGpa();
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return const Stacked(
       children: [
-        FadeSlideIn(child: ManualCgpaCard()),
-        SizedBox(height: Spacing.lg),
-        FadeSlideIn(delayMs: 60, child: PlannerCard()),
-        SizedBox(height: Spacing.lg),
-        FadeSlideIn(delayMs: 120, child: ManualTargetCard()),
-        SizedBox(height: Spacing.lg),
-        FadeSlideIn(delayMs: 160, child: GradeChartCard()),
+        ManualCgpaCard(),
+        PlannerCard(),
+        ManualTargetCard(),
+        GradeChartCard(),
       ],
     );
   }

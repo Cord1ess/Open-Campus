@@ -5,14 +5,38 @@ import '../../core/app_info.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/avatar.dart';
 import '../../shared/widgets.dart';
-import '../about/about_page.dart';
 import '../auth/auth_controller.dart';
-import '../common/collapsing_title.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
+import 'settings_sections.dart';
 
+/// Profile + settings in one place: identity and personal details, then
+/// appearance, storage, server status and about, then log out.
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('This clears the saved data on this device.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Log out')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    // Pop any pushed routes (this page lives on top of the shell) so logout
+    // reveals the login screen, not a stale page.
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    ref.read(authControllerProvider.notifier).logout();
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,98 +50,65 @@ class ProfilePage extends ConsumerWidget {
     final authRoll =
         auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : null;
     final roll = home?.roll ?? authRoll ?? '—';
+    final p = context.palette;
 
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverCollapsingAppBar(
-            title: 'Profile',
-            actions: [
-              IconButton(
-                onPressed: () => Navigator.of(context)
-                    .push(sharedAxisRoute(const AboutPage())),
-                tooltip: 'Settings',
-                iconSize: 26,
-                icon: const Icon(Icons.settings_outlined),
-              ),
-            ],
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(Spacing.lg),
-            sliver: SliverList.list(children: [
-              // Desktop (≥720): profile header on the left, personal info on the
-              // right, side by side. Mobile: stacked. Top-aligned so the shorter
-              // card doesn't stretch.
-              LayoutBuilder(builder: (context, c) {
-                final wide = c.maxWidth >= 720;
-                final header = FadeSlideIn(
-                  child: _ProfileHeader(
-                      home: home, roll: roll, avatarBytes: avatar),
-                );
-                final bio = (home != null && _hasBio(home))
-                    ? FadeSlideIn(delayMs: 60, child: _BioCard(home))
-                    : null;
-                if (!wide) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      header,
-                      if (bio != null) ...[
-                        const SizedBox(height: Spacing.lg),
-                        bio,
-                      ],
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: header),
-                    if (bio != null) ...[
-                      const SizedBox(width: Spacing.lg),
-                      Expanded(child: bio),
-                    ],
-                  ],
-                );
-              }),
-              const SizedBox(height: Spacing.lg),
-              const FadeSlideIn(
-                delayMs: 80,
-                child: SectionCard(
-                  title: 'Your privacy',
-                  icon: Icons.lock_outline,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Bullet('Your UCAM password is never stored.'),
-                      _Bullet(
-                          'We keep no copy of your data on our servers — everything is live.'),
-                      _Bullet(
-                          'The app caches your last view on this device only; logging out clears it.'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: Spacing.lg),
-              FadeSlideIn(
-                delayMs: 140,
-                child: _LogoutCard(onLogout: () {
-                  // Pop any pushed routes (this Profile page lives on top of the
-                  // shell) so logout reveals the login screen, not a stale page.
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                  ref.read(authControllerProvider.notifier).logout();
-                }),
-              ),
-              const SizedBox(height: Spacing.xl),
-              Center(
-                child: Text(
-                    'Open Campus · unofficial · v${AppInfo.version} ${AppInfo.buildChannel}',
-                    style: context.text.labelSmall
-                        ?.copyWith(color: context.scheme.onSurfaceVariant)),
-              ),
-              const SizedBox(height: 96),
-            ]),
-          ),
+    final identity = _IdentityPanel(home: home, roll: roll, avatarBytes: avatar);
+    final personal =
+        home != null && _hasBio(home) ? _PersonalSection(home) : null;
+    const privacy = InfoNote(
+      icon: AppIcons.privacy,
+      text:
+          'Your UCAM password is never stored and our servers keep no copy of '
+          'your data; the app caches your last view on this device only, and '
+          'logging out clears it.',
+    );
+    final logout = Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        onPressed: () => _logout(context, ref),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: p.dangerInk,
+          side: BorderSide(color: p.dangerInk),
+        ),
+        icon: const Icon(AppIcons.logout, size: 18),
+        label: const Text('Log out'),
+      ),
+    );
+    final version = Text(
+      'Open Campus · unofficial · v${AppInfo.version} ${AppInfo.buildChannel}',
+      style: context.text.bodySmall,
+    );
+
+    final left = Stacked(children: [
+      identity,
+      if (personal != null) personal,
+      privacy,
+      logout,
+    ]);
+    const right = Stacked(children: [
+      AppearanceSection(),
+      StorageSection(),
+      ServerStatusSection(),
+      AboutSection(),
+    ]);
+
+    return PageScaffold(
+      title: 'Profile',
+      body: Stacked(
+        children: [
+          if (Breakpoints.isExpanded(context))
+            TwoColumn(left: left, right: right, ratio: 0.45)
+          else ...[
+            identity,
+            if (personal != null) personal,
+            const AppearanceSection(),
+            const StorageSection(),
+            const ServerStatusSection(),
+            const AboutSection(),
+            privacy,
+            logout,
+          ],
+          version,
         ],
       ),
     );
@@ -131,11 +122,11 @@ bool _hasBio(HomeSummary h) =>
     h.fatherName != null ||
     h.motherName != null;
 
-class _ProfileHeader extends StatelessWidget {
+class _IdentityPanel extends StatelessWidget {
   final HomeSummary? home;
   final String roll;
   final List<int>? avatarBytes;
-  const _ProfileHeader({
+  const _IdentityPanel({
     required this.home,
     required this.roll,
     required this.avatarBytes,
@@ -143,177 +134,68 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
     final term = home?.currentTerm?.name;
-    return Container(
-      padding: const EdgeInsets.all(Spacing.xl),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Panel(
+      child: Row(
         children: [
-          // Smaller avatar (radius 36) so it never squashes inside the header,
-          // and reads cleanly when the header sits beside the info card on desktop.
-          Avatar(bytes: avatarBytes, radius: 36),
-          const SizedBox(height: Spacing.lg),
-          Text(home?.name ?? 'Student',
-              style: context.text.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: Spacing.sm),
-          // ID badge — high-contrast pill so the student ID is clearly visible.
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: Spacing.md, vertical: 5),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(Radii.full),
-            ),
-            child: Row(
+          Avatar(bytes: avatarBytes, radius: 28),
+          const SizedBox(width: Spacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.badge_outlined,
-                    size: 14, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 6),
-                Text(roll,
-                    style: context.text.labelLarge?.copyWith(
-                        color: scheme.onSurface,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5)),
+                Text(home?.name ?? 'Student',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.text.titleMedium),
+                const SizedBox(height: Spacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: StatusBadge(roll, outlined: true, icon: AppIcons.id),
+                ),
+                if (term != null) ...[
+                  const SizedBox(height: Spacing.sm),
+                  Text(term, style: context.text.bodySmall),
+                ],
               ],
             ),
           ),
-          if (term != null) ...[
-            const SizedBox(height: Spacing.sm),
-            Text(term,
-                style: context.text.labelMedium
-                    ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
-          ],
         ],
       ),
     );
   }
 }
 
-class _BioCard extends StatelessWidget {
+class _PersonalSection extends StatelessWidget {
   final HomeSummary home;
-  const _BioCard(this.home);
+  const _PersonalSection(this.home);
+
 
   @override
   Widget build(BuildContext context) {
-    final rows = <(IconData, String, String)>[
-      if (home.dob != null) (Icons.cake_outlined, 'Date of birth', home.dob!),
+    final rows = <Widget>[
+      if (home.dob != null)
+        KeyValueRow(icon: AppIcons.birthday, label: 'Date of birth', value: home.dob!),
       if (home.bloodGroup != null)
-        (Icons.bloodtype_outlined, 'Blood group', home.bloodGroup!),
-      if (home.phone != null) (Icons.phone_outlined, 'Phone', home.phone!),
+        KeyValueRow(
+            icon: AppIcons.bloodGroup, label: 'Blood group', value: home.bloodGroup!),
+      if (home.phone != null)
+        KeyValueRow(icon: AppIcons.phone, label: 'Phone', value: home.phone!),
       if (home.fatherName != null)
-        (Icons.man_outlined, 'Father', home.fatherName!),
+        KeyValueRow(icon: AppIcons.family, label: 'Father', value: home.fatherName!),
       if (home.motherName != null)
-        (Icons.woman_outlined, 'Mother', home.motherName!),
+        KeyValueRow(icon: AppIcons.family, label: 'Mother', value: home.motherName!),
     ];
-    return SectionCard(
+    return RowGroup(
       title: 'Personal',
-      icon: Icons.badge_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0)
-              Divider(height: Spacing.lg, color: context.scheme.outlineVariant),
-            _InfoRow(rows[i].$1, rows[i].$2, rows[i].$3),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One personal-info line: an icon, a fixed-width label, then the value — the
-/// fixed label column keeps every value left-aligned in a clean second column.
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _InfoRow(this.icon, this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(icon, size: 18, color: scheme.primary),
-        const SizedBox(width: Spacing.md),
-        SizedBox(
-          width: 96,
-          child: Text(label,
-              style: context.text.bodyMedium
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
-        ),
-        const SizedBox(width: Spacing.sm),
-        Expanded(
-          child: Text(value,
-              overflow: TextOverflow.ellipsis,
-              style: context.text.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-        ),
-      ],
-    );
-  }
-}
-
-/// Bordered logout card matching the unified card look.
-class _LogoutCard extends StatelessWidget {
-  final VoidCallback onLogout;
-  const _LogoutCard({required this.onLogout});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SpringTap(
-      onTap: onLogout,
-      borderRadius: BorderRadius.circular(Radii.lg),
-      child: Container(
-        padding: const EdgeInsets.all(Spacing.lg),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.logout, size: 20, color: scheme.error),
-            const SizedBox(width: Spacing.md),
-            Text('Log out',
-                style: context.text.titleMedium?.copyWith(color: scheme.error)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Bullet extends StatelessWidget {
-  final String text;
-  const _Bullet(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        for (final r in rows)
           Padding(
-            padding: const EdgeInsets.only(top: 6, right: 8),
-            child: Icon(Icons.check_circle,
-                size: 15, color: context.status.good),
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
+            child: r,
           ),
-          Expanded(child: Text(text, style: context.text.bodyMedium)),
-        ],
-      ),
+      ],
     );
   }
 }

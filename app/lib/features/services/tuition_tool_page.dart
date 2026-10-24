@@ -10,8 +10,8 @@ import '../finance/bill_model.dart';
 import 'numeric_input.dart';
 import 'tool_scaffold.dart';
 
-/// Tuition Fee Tool — Auto (your real UCAM bill) + Manual (estimate from inputs,
-/// ported from the reference calculator).
+/// Tuition Fee Tool — Auto (your real UCAM bill) + Manual (estimate from
+/// inputs).
 class TuitionToolPage extends ConsumerStatefulWidget {
   const TuitionToolPage({super.key});
 
@@ -48,17 +48,13 @@ class _AutoTuition extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(billProvider);
-    return switch (state) {
-      ResLoading() => const CardSkeleton(lines: 8),
-      ResError(:final message) => StateMessage(
-          icon: Icons.cloud_off,
-          title: 'Couldn’t load your bill',
-          subtitle: message,
-          actionLabel: 'Try again',
-          onAction: () => ref.read(billProvider.notifier).load(force: true),
-        ),
-      ResData(:final loaded) => _AutoTuitionBody(loaded.data),
-    };
+    return ResourceBody<BillData>(
+      state: state,
+      loadingLabel: 'Loading your bill…',
+      errorTitle: 'Couldn’t load your bill',
+      onRetry: () => ref.read(billProvider.notifier).load(force: true),
+      builder: (d) => _AutoTuitionBody(d),
+    );
   }
 }
 
@@ -68,7 +64,7 @@ class _AutoTuitionBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
+    final p = context.palette;
     final billed = bill.totalBilled ?? 0;
     final discount = bill.totalDiscount ?? 0;
     final paid = bill.totalPaid ?? 0;
@@ -82,8 +78,44 @@ class _AutoTuitionBody extends StatelessWidget {
             .where((i) => i.trimester == term && !i.isPayment)
             .toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final summary = Section(
+      title: 'Account summary',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          KeyValueRow(label: 'Total billed', value: formatBdt(billed)),
+          if (discount > 0)
+            KeyValueRow(
+                label: 'Discounts / waivers',
+                value: '−${formatBdt(discount)}',
+                valueColor: p.successInk),
+          KeyValueRow(label: 'Total paid', value: formatBdt(paid)),
+          const Divider(height: Spacing.lg),
+          KeyValueRow(
+            label: balance > 0
+                ? 'Outstanding due'
+                : balance < 0
+                    ? 'Advance / credit'
+                    : 'Cleared',
+            value: formatBdt(balance.abs()),
+            emphasize: true,
+            valueColor: balance > 0 ? p.warningInk : p.successInk,
+          ),
+        ],
+      ),
+    );
+
+    final charges = termItems.isEmpty
+        ? null
+        : Section(
+            title: 'This trimester’s charges',
+            trailing: term != null ? Text(term) : null,
+            child: RowGroup(
+              children: [for (final it in termItems) _BillRow(it)],
+            ),
+          );
+
+    return Stacked(
       children: [
         DataUsedPanel(rows: [
           ('Total billed (all trimesters)', formatBdt(billed)),
@@ -93,108 +125,21 @@ class _AutoTuitionBody extends StatelessWidget {
               formatBdt(balance.abs())),
           if (term != null) ('Current trimester', term),
         ]),
-        const SizedBox(height: Spacing.lg),
-        FadeSlideIn(
-          child: SectionCard(
-            title: 'Account summary',
-            icon: Icons.account_balance_wallet_outlined,
-            child: Column(
-              children: [
-                _row(context, 'Total billed', formatBdt(billed)),
-                if (discount > 0)
-                  _row(context, 'Discounts / waivers', '−${formatBdt(discount)}',
-                      color: context.status.good),
-                _row(context, 'Total paid', formatBdt(paid)),
-                Divider(height: Spacing.xl, color: scheme.outlineVariant),
-                _row(
-                  context,
-                  balance > 0
-                      ? 'Outstanding due'
-                      : balance < 0
-                          ? 'Advance / credit'
-                          : 'Cleared',
-                  formatBdt(balance.abs()),
-                  bold: true,
-                  color: balance > 0 ? context.status.bad : scheme.primary,
-                ),
-              ],
-            ),
-          ),
+        if (charges != null)
+          ResponsiveGrid(
+            maxColumns: 2,
+            stretch: false,
+            spacing: Spacing.xl,
+            children: [summary, charges],
+          )
+        else
+          summary,
+        const InfoNote(
+          text: 'This is your actual UCAM bill — the real figures, not an '
+              'estimate. For a what-if estimate (different credits, waiver, '
+              'scholarship), switch to Manual.',
         ),
-        if (termItems.isNotEmpty) ...[
-          const SizedBox(height: Spacing.lg),
-          FadeSlideIn(
-            delayMs: 60,
-            child: SectionCard(
-              title: 'This trimester’s charges',
-              icon: Icons.receipt_long_outlined,
-              trailing: term != null
-                  ? Text(term,
-                      style: context.text.labelMedium
-                          ?.copyWith(color: scheme.onSurfaceVariant))
-                  : null,
-              child: Column(
-                children: [
-                  for (var i = 0; i < termItems.length; i++) ...[
-                    if (i > 0)
-                      Divider(height: Spacing.lg, color: scheme.outlineVariant),
-                    _BillRow(termItems[i]),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: Spacing.lg),
-        _note(context,
-            'This is your actual UCAM bill — the real figures, not an estimate. '
-            'For a what-if estimate (different credits, waiver, scholarship), '
-            'switch to Manual.'),
       ],
-    );
-  }
-
-  Widget _row(BuildContext context, String label, String value,
-      {bool bold = false, Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label,
-                style: context.text.bodyMedium?.copyWith(
-                    color: context.scheme.onSurfaceVariant,
-                    fontWeight: bold ? FontWeight.w700 : null)),
-          ),
-          Text(value,
-              style: (bold ? context.text.titleMedium : context.text.bodyMedium)
-                  ?.copyWith(
-                      color: color, fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  Widget _note(BuildContext context, String text) {
-    final scheme = context.scheme;
-    return Container(
-      padding: const EdgeInsets.all(Spacing.md),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(Radii.md),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline, size: 16, color: scheme.primary),
-          const SizedBox(width: Spacing.sm),
-          Expanded(
-            child: Text(text,
-                style: context.text.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45)),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -205,46 +150,34 @@ class _BillRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
+    final p = context.palette;
     final net = (item.amount ?? 0) - (item.discount ?? 0);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.feeType ?? item.courseCode ?? 'Fee',
-                  style: context.text.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              if (item.courseCode != null && item.feeType != null)
-                Text(
-                    '${item.courseCode}${item.credit != null ? ' · ${item.credit!.toStringAsFixed(1)} cr' : ''}',
-                    style: context.text.bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-          ),
-        ),
-        const SizedBox(width: Spacing.sm),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(formatBdt(net),
-                style: context.text.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            if ((item.discount ?? 0) > 0)
-              Text('−${formatBdt(item.discount!)}',
-                  style: context.text.labelSmall
-                      ?.copyWith(color: context.status.good)),
-          ],
-        ),
-      ],
+    final hasDiscount = (item.discount ?? 0) > 0;
+    final sub = item.courseCode != null && item.feeType != null
+        ? '${item.courseCode}${item.credit != null ? ' · ${item.credit!.toStringAsFixed(1)} cr' : ''}'
+        : null;
+    return ListRow(
+      title: item.feeType ?? item.courseCode ?? 'Fee',
+      subtitle: sub,
+      trailing: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(formatBdt(net),
+              style: context.text.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w600, fontFeatures: tabularFigures)),
+          if (hasDiscount)
+            Text('−${formatBdt(item.discount!)}',
+                style: context.text.labelSmall?.copyWith(
+                    color: p.successInk, fontFeatures: tabularFigures)),
+        ],
+      ),
     );
   }
 }
 
 // ===========================================================================
-// MANUAL — estimate from inputs (port of the reference calculator).
+// MANUAL — estimate from inputs.
 // ===========================================================================
 class _ManualTuition extends StatefulWidget {
   const _ManualTuition();
@@ -272,8 +205,7 @@ class _ManualTuitionState extends State<_ManualTuition> {
     super.dispose();
   }
 
-  // Clamp to non-negative so a stray "-" can't produce a negative fee/credit
-  // that would flow into the tuition math.
+  // Clamp to non-negative so a stray "-" can't produce a negative fee/credit.
   double _num(TextEditingController c) => clampNonNeg(c.text) ?? 0;
 
   @override
@@ -294,50 +226,43 @@ class _ManualTuitionState extends State<_ManualTuition> {
         input.retakeRegularCredits > 0;
     final r = calculateTuition(input);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final inputs = Stacked(
       children: [
-        FadeSlideIn(
-          child: SectionCard(
-            title: 'Your courses',
-            icon: Icons.menu_book_outlined,
+        Section(
+          title: 'Your courses',
+          child: FormWidth(
+            maxWidth: 560,
             child: Column(
               children: [
-                _field(_newCr, 'New course credits', Icons.add_circle_outline),
+                _field(_newCr, 'New course credits'),
                 const SizedBox(height: Spacing.md),
-                _field(_retake1Cr, 'Retake credits (1st time, 50% off)',
-                    Icons.replay_outlined),
+                _field(_retake1Cr, 'Retake credits (1st time, 50% off)'),
                 const SizedBox(height: Spacing.md),
-                _field(_retakeRegCr, 'Retake credits (2nd+ time)',
-                    Icons.repeat_outlined),
+                _field(_retakeRegCr, 'Retake credits (2nd+ time)'),
               ],
             ),
           ),
         ),
-        const SizedBox(height: Spacing.lg),
-        FadeSlideIn(
-          delayMs: 60,
-          child: SectionCard(
-            title: 'Fees & discounts',
-            icon: Icons.percent_outlined,
+        Section(
+          title: 'Fees & discounts',
+          child: FormWidth(
+            maxWidth: 560,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(children: [
-                  Expanded(child: _field(_perCredit, 'Per-credit fee', null)),
+                  Expanded(child: _field(_perCredit, 'Per-credit fee')),
                   const SizedBox(width: Spacing.md),
-                  Expanded(child: _field(_trimFee, 'Trimester fee', null)),
+                  Expanded(child: _field(_trimFee, 'Trimester fee')),
                 ]),
-                const SizedBox(height: Spacing.md),
+                const SizedBox(height: Spacing.lg),
                 _percentRow('Waiver', _waiver, (v) => setState(() => _waiver = v)),
-                const SizedBox(height: Spacing.sm),
                 _percentRow('Scholarship', _scholarship,
                     (v) => setState(() => _scholarship = v)),
-                const SizedBox(height: Spacing.xs),
                 Text(
                     'Scholarship applies to your first 13 credits; any extra '
                     'credits use the waiver rate.',
-                    style: context.text.labelSmall?.copyWith(
-                        color: context.scheme.onSurfaceVariant)),
+                    style: context.text.bodySmall),
                 const SizedBox(height: Spacing.sm),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -352,44 +277,42 @@ class _ManualTuitionState extends State<_ManualTuition> {
                   value: _waiverFirst,
                   onChanged: (v) => setState(() => _waiverFirst = v),
                   title: const Text('Apply waiver in 1st installment'),
-                  subtitle: const Text('1st installment = 40% of net (not gross)'),
+                  subtitle:
+                      const Text('1st installment = 40% of net (not gross)'),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: Spacing.lg),
-        if (hasCredits)
-          FadeSlideIn(delayMs: 120, child: _ResultCard(r))
-        else
-          _hint(context, 'Enter your credits above to see the estimate.'),
       ],
     );
+
+    final result = hasCredits
+        ? _ResultSection(r)
+        : const InfoNote(
+            text: 'Enter your credits above to see the estimate.');
+
+    return TwoColumn(left: inputs, right: result, ratio: 0.5);
   }
 
-  Widget _field(TextEditingController c, String label, IconData? icon) {
+  Widget _field(TextEditingController c, String label) {
     return TextField(
       controller: c,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: decimalInput,
       onChanged: (_) => setState(() {}),
-      decoration: InputDecoration(
-        labelText: label,
-        isDense: true,
-        prefixIcon: icon != null ? Icon(icon) : null,
-      ),
+      decoration: InputDecoration(labelText: label),
     );
   }
 
   Widget _percentRow(String label, double value, ValueChanged<double> onChanged) {
-    final scheme = context.scheme;
     return Row(
       children: [
         SizedBox(
             width: 96,
             child: Text(label,
                 style: context.text.bodyMedium
-                    ?.copyWith(color: scheme.onSurfaceVariant))),
+                    ?.copyWith(color: context.scheme.onSurfaceVariant))),
         Expanded(
           child: Slider(
             value: value,
@@ -405,149 +328,76 @@ class _ManualTuitionState extends State<_ManualTuition> {
           child: Text('${value.toStringAsFixed(0)}%',
               textAlign: TextAlign.right,
               style: context.text.labelLarge?.copyWith(
-                  color: scheme.primary, fontWeight: FontWeight.w800)),
+                  color: context.palette.accentInk,
+                  fontFeatures: tabularFigures)),
         ),
       ],
     );
   }
-
-  Widget _hint(BuildContext context, String text) => Container(
-        padding: const EdgeInsets.all(Spacing.lg),
-        decoration: BoxDecoration(
-          color: context.scheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(Radii.md),
-        ),
-        child: Row(children: [
-          Icon(Icons.info_outline, size: 18, color: context.scheme.primary),
-          const SizedBox(width: Spacing.sm),
-          Expanded(
-              child: Text(text,
-                  style: context.text.bodyMedium
-                      ?.copyWith(color: context.scheme.onSurfaceVariant))),
-        ]),
-      );
 }
 
-class _ResultCard extends StatelessWidget {
+class _ResultSection extends StatelessWidget {
   final TuitionResult r;
-  const _ResultCard(this.r);
+  const _ResultSection(this.r);
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return SectionCard(
+    final p = context.palette;
+    return Section(
       title: 'Estimated payable',
-      icon: Icons.calculate_outlined,
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: scheme.primary,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(formatBdt(r.netPayable),
-            style: context.text.labelLarge?.copyWith(
-                color: onAccent(scheme.primary), fontWeight: FontWeight.w800)),
-      ),
+      trailing: StatusBadge(formatBdt(r.netPayable), tone: StatusTone.accent),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _line(context, 'New course tuition', formatBdt(r.newTuition)),
+          KeyValueRow(label: 'New course tuition', value: formatBdt(r.newTuition)),
           if (r.retakeFirstTuition > 0)
-            _line(context, 'Retake (1st time)', formatBdt(r.retakeFirstTuition)),
+            KeyValueRow(
+                label: 'Retake (1st time)',
+                value: formatBdt(r.retakeFirstTuition)),
           if (r.retakeRegularTuition > 0)
-            _line(context, 'Retake (2nd+ time)',
-                formatBdt(r.retakeRegularTuition)),
-          _line(context, 'Trimester / admin fee', formatBdt(r.adminFees)),
-          Divider(height: Spacing.lg, color: scheme.outlineVariant),
-          _line(context, 'Gross total', formatBdt(r.grossTotal)),
-          for (final d in r.discounts)
-            _line(context, d.label, '−${formatBdt(d.amount)}',
-                color: context.status.good, sub: d.description),
-          Divider(height: Spacing.lg, color: scheme.outlineVariant),
-          _line(context, 'Net payable', formatBdt(r.netPayable),
-              bold: true, color: scheme.primary),
+            KeyValueRow(
+                label: 'Retake (2nd+ time)',
+                value: formatBdt(r.retakeRegularTuition)),
+          KeyValueRow(
+              label: 'Trimester / admin fee', value: formatBdt(r.adminFees)),
+          const Divider(height: Spacing.lg),
+          KeyValueRow(label: 'Gross total', value: formatBdt(r.grossTotal)),
+          for (final d in r.discounts) ...[
+            KeyValueRow(
+                label: d.label,
+                value: '−${formatBdt(d.amount)}',
+                valueColor: p.successInk),
+            if (d.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Spacing.xs),
+                child: Text(d.description, style: context.text.bodySmall),
+              ),
+          ],
+          const Divider(height: Spacing.lg),
+          KeyValueRow(
+              label: 'Net payable',
+              value: formatBdt(r.netPayable),
+              emphasize: true,
+              valueColor: p.accentInk),
           const SizedBox(height: Spacing.lg),
-          Text('Installments',
-              style: context.text.labelMedium?.copyWith(
-                  color: scheme.primary, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(r.installmentMethod,
-              style: context.text.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
-          const SizedBox(height: Spacing.sm),
-          _installment(context, '1st', r.firstInstallment),
-          _installment(context, '2nd', r.secondInstallment),
-          _installment(context, '3rd', r.thirdInstallment),
-        ],
-      ),
-    );
-  }
-
-  Widget _line(BuildContext context, String label, String value,
-      {bool bold = false, Color? color, String? sub}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: context.text.bodyMedium?.copyWith(
-                        color: context.scheme.onSurfaceVariant,
-                        fontWeight: bold ? FontWeight.w700 : null)),
-                if (sub != null)
-                  Text(sub,
-                      style: context.text.labelSmall
-                          ?.copyWith(color: context.scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          Text(value,
-              style: (bold ? context.text.titleMedium : context.text.bodyMedium)
-                  ?.copyWith(
-                      color: color,
-                      fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
+          Text('Installments', style: context.text.titleSmall),
+          const SizedBox(height: Spacing.xxs),
+          Text(r.installmentMethod, style: context.text.bodySmall),
+          const SizedBox(height: Spacing.xs),
+          _installment(context, '1st installment', r.firstInstallment),
+          _installment(context, '2nd installment', r.secondInstallment),
+          _installment(context, '3rd installment', r.thirdInstallment),
         ],
       ),
     );
   }
 
   Widget _installment(BuildContext context, String label, double amount) {
-    final scheme = context.scheme;
     final zero = amount <= 0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: zero
-                  ? scheme.surfaceContainerHighest
-                  : scheme.primary.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Text(label,
-                style: context.text.labelSmall?.copyWith(
-                    color: zero ? scheme.onSurfaceVariant : scheme.primary,
-                    fontWeight: FontWeight.w800)),
-          ),
-          const SizedBox(width: Spacing.md),
-          Expanded(
-              child: Text('$label installment',
-                  style: context.text.bodyMedium?.copyWith(
-                      color: zero ? scheme.onSurfaceVariant : null))),
-          Text(formatBdt(amount),
-              style: context.text.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: zero ? scheme.onSurfaceVariant : null)),
-        ],
-      ),
+    return KeyValueRow(
+      label: label,
+      value: formatBdt(amount),
+      valueColor: zero ? context.scheme.onSurfaceVariant : null,
     );
   }
 }

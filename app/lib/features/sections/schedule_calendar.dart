@@ -4,14 +4,13 @@ import '../../core/theme/app_theme.dart';
 import 'section_catalog_model.dart';
 import 'simulator_engine.dart';
 
-/// A weekly calendar-grid visualization of one built schedule: days are columns,
-/// time runs down the vertical axis, and each class is a block positioned and
-/// sized by its real start/end time — so the whole week is legible at a glance.
+/// Weekly calendar grid of one built schedule: days are columns, time runs
+/// down, each class is a block positioned/sized by its real start/end time.
 ///
-/// Precision matters here: block top = (start - dayStart) and height =
-/// duration, both in the same minutes-per-pixel scale, so overlaps and gaps are
-/// truthful. Colors are assigned per course so the two meetings of a theory
-/// course read as the same class across its two days.
+/// Block top = (start - dayStart) and height = duration on one minutes-per-
+/// pixel scale, so overlaps and gaps are truthful. Colours come from the theme
+/// palette's series, assigned per course in first-seen order (the legend in
+/// schedule_detail_page uses the same rule).
 class ScheduleCalendarView extends StatelessWidget {
   final ScheduleCandidate candidate;
   final String? title;
@@ -26,8 +25,8 @@ class ScheduleCalendarView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final series = context.palette.series;
 
-    // Collect every meeting (course + section + slot) with resolved minutes.
     final meetings = <_Meeting>[];
     for (final pick in candidate.picks) {
       final s = pick.section;
@@ -47,7 +46,6 @@ class ScheduleCalendarView extends StatelessWidget {
       }
     }
 
-    // Days that actually have classes, in week order (Sat..).
     final dayset = meetings.map((m) => m.day).toSet().toList()
       ..sort((a, b) => weekdayRank(a).compareTo(weekdayRank(b)));
 
@@ -62,8 +60,6 @@ class ScheduleCalendarView extends StatelessWidget {
       );
     }
 
-    // Time bounds: snap to the hour around the earliest start / latest end, so
-    // the grid begins and ends on clean hour lines.
     var minStart = meetings.map((m) => m.startMin).reduce((a, b) => a < b ? a : b);
     var maxEnd = meetings.map((m) => m.endMin).reduce((a, b) => a > b ? a : b);
     minStart = (minStart ~/ 60) * 60;
@@ -71,16 +67,14 @@ class ScheduleCalendarView extends StatelessWidget {
     final totalMin = maxEnd - minStart;
     final gridH = totalMin / _minPerPx;
 
-    // Stable per-course color from a fixed palette (same course = same color).
+    // Stable per-course colour (same course = same colour), first-seen order.
     final courseColors = <String, Color>{};
-    final palette = _palette(scheme);
     var ci = 0;
     for (final m in meetings) {
-      courseColors.putIfAbsent(m.courseCode, () => palette[ci++ % palette.length]);
+      courseColors.putIfAbsent(
+          m.courseCode, () => series[ci++ % series.length]);
     }
 
-    // Column width: fill the viewport but keep a sensible minimum so days don't
-    // get too narrow; the whole grid scrolls horizontally if needed.
     return LayoutBuilder(builder: (context, constraints) {
       final avail = constraints.maxWidth - _hourLabelW;
       const minCol = 96.0;
@@ -92,9 +86,7 @@ class ScheduleCalendarView extends StatelessWidget {
         height: _headerH + gridH + _pad * 2,
         child: Stack(
           children: [
-            // Hour lines + labels.
             ..._hourLines(context, minStart, maxEnd, gridW, colW, dayset.length),
-            // Day headers.
             for (var d = 0; d < dayset.length; d++)
               Positioned(
                 left: _hourLabelW + d * colW,
@@ -103,13 +95,10 @@ class ScheduleCalendarView extends StatelessWidget {
                 height: _headerH,
                 child: Center(
                   child: Text(_shortDay(dayset[d]),
-                      style: context.text.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w800, color: scheme.primary)),
+                      style: context.text.titleSmall
+                          ?.copyWith(color: scheme.onSurface)),
                 ),
               ),
-            // Class blocks — overlapping classes on the same day are split into
-            // side-by-side lanes so a clash is visible, not hidden behind the
-            // block drawn on top.
             for (final placed in _layoutLanes(meetings, dayset))
               _positionedBlock(
                 context,
@@ -149,17 +138,15 @@ class ScheduleCalendarView extends StatelessWidget {
               width: _hourLabelW,
               child: Text(
                 to12h('${(t ~/ 60).toString().padLeft(2, '0')}:00')
-                    .replaceAll(':00', ''), // "8 AM" style, compact
+                    .replaceAll(':00', ''),
                 textAlign: TextAlign.right,
                 style: context.text.labelSmall
-                    ?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10),
+                    ?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: Spacing.xs),
             Expanded(
-                child: Container(
-                    height: 1,
-                    color: scheme.outlineVariant.withValues(alpha: 0.6))),
+                child: Container(height: 1, color: scheme.outlineVariant)),
           ],
         ),
       ));
@@ -178,18 +165,15 @@ class ScheduleCalendarView extends StatelessWidget {
     int laneCount = 1,
   }) {
     final top = _headerH + _pad + (m.startMin - minStart) / _minPerPx;
-    // Exact height by duration; only enforce a tiny floor so a very short class
-    // is still tappable/legible, without inflating it enough to overlap the next.
     final rawH = (m.endMin - m.startMin) / _minPerPx;
     final height = rawH.clamp(16.0, 100000.0);
-    final onColor = _readableOn(color);
+    final fg = onColor(color);
     final compact = height < 46;
 
-    // Split the day column into `laneCount` side-by-side lanes for overlapping
-    // classes (the clash case), so both are visible instead of one hiding the
-    // other. laneCount == 1 → full width, as before.
     final laneW = (colW - 4) / laneCount;
     final left = _hourLabelW + dayIndex * colW + 2 + lane * laneW;
+
+    final small = context.text.labelSmall;
 
     return Positioned(
       left: left,
@@ -197,10 +181,11 @@ class ScheduleCalendarView extends StatelessWidget {
       width: laneW - (laneCount > 1 ? 2 : 0),
       height: (height - 2).clamp(14.0, 100000.0),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.xs + Spacing.xxs, vertical: Spacing.xs),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(Radii.xs),
         ),
         child: ClipRect(
           child: Column(
@@ -210,32 +195,22 @@ class ScheduleCalendarView extends StatelessWidget {
                 m.courseName,
                 maxLines: compact ? 1 : 2,
                 overflow: TextOverflow.ellipsis,
-                style: context.text.labelSmall?.copyWith(
-                    color: onColor,
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
-                    fontSize: 10.5),
+                style: small?.copyWith(
+                    color: fg, fontWeight: FontWeight.w600, height: 1.1),
               ),
               if (!compact) ...[
                 if (m.section != null) ...[
                   const SizedBox(height: 1),
-                  Text(
-                    'Sec ${m.section}',
-                    style: context.text.labelSmall?.copyWith(
-                        color: onColor.withValues(alpha: 0.9),
-                        fontSize: 9,
-                        height: 1.1),
-                  ),
+                  Text('Sec ${m.section}',
+                      style: small?.copyWith(color: fg, height: 1.1)),
                 ],
                 const Spacer(),
                 Text(
                   '${to12h(_mm(m.startMin))}–${to12h(_mm(m.endMin))}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: context.text.labelSmall?.copyWith(
-                      color: onColor.withValues(alpha: 0.9),
-                      fontSize: 9,
-                      height: 1.1),
+                  style: small?.copyWith(
+                      color: fg, height: 1.1, fontFeatures: tabularFigures),
                 ),
               ],
             ],
@@ -254,29 +229,8 @@ class ScheduleCalendarView extends StatelessWidget {
   static String _shortDay(String day) =>
       day.length >= 3 ? day.substring(0, 3) : day;
 
-  /// A pleasant, distinct palette derived from the theme so blocks are colorful
-  /// but still on-brand. Kept saturated enough to tell courses apart.
-  static List<Color> _palette(ColorScheme s) => [
-        s.primary,
-        s.tertiary,
-        const Color(0xFF3B82F6), // blue
-        const Color(0xFF10B981), // green
-        const Color(0xFFF59E0B), // amber
-        const Color(0xFF8B5CF6), // violet
-        const Color(0xFFEC4899), // pink
-        const Color(0xFF14B8A6), // teal
-      ];
-
-  /// Pick black/white text for contrast against a block color.
-  static Color _readableOn(Color bg) =>
-      bg.computeLuminance() > 0.55 ? Colors.black87 : Colors.white;
-
-  /// Assign each meeting a lane (column slot) within its day so overlapping
-  /// classes render side-by-side. For each day, meetings are grouped into
-  /// "overlap clusters" (chains of mutually/transitively overlapping classes);
-  /// within a cluster each meeting gets a distinct lane and they all share the
-  /// cluster's lane count, so the widths line up. Non-overlapping classes get
-  /// lane 0 of 1 (full width). Skips meetings with unparseable times.
+  /// Assign each meeting a lane within its day so overlapping classes render
+  /// side-by-side (the clash case). Non-overlapping classes get lane 0 of 1.
   static List<_PlacedMeeting> _layoutLanes(
       List<_Meeting> meetings, List<String> dayset) {
     final placed = <_PlacedMeeting>[];
@@ -285,7 +239,6 @@ class ScheduleCalendarView extends StatelessWidget {
         ..sort((a, b) => a.startMin.compareTo(b.startMin));
       var i = 0;
       while (i < dayMeetings.length) {
-        // Grow a cluster while the next class starts before the cluster's max end.
         var clusterEnd = dayMeetings[i].endMin;
         var j = i + 1;
         while (j < dayMeetings.length && dayMeetings[j].startMin < clusterEnd) {
@@ -293,8 +246,7 @@ class ScheduleCalendarView extends StatelessWidget {
           j++;
         }
         final cluster = dayMeetings.sublist(i, j);
-        // Greedy lane assignment within the cluster.
-        final laneEnds = <int>[]; // per-lane last end time
+        final laneEnds = <int>[];
         final laneOf = <int>[];
         for (final m in cluster) {
           var lane = -1;

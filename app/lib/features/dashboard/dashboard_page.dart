@@ -1,145 +1,37 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../shared/avatar.dart';
 import '../../shared/brand_logo.dart';
-import '../../shared/responsive.dart';
 import '../../shared/widgets.dart';
 import '../academics/calendar_model.dart';
 import '../academics/calendar_page.dart';
 import '../academics/class_routine_page.dart';
 import '../auth/auth_controller.dart';
 import '../finance/bill_page.dart';
-import '../profile/profile_page.dart';
+import '../profile/profile_button.dart';
 import 'attendance_page.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_widgets.dart';
 import 'home_model.dart';
 import 'models.dart';
 import 'notices_model.dart';
-import 'resource_view.dart';
 import 'results_page.dart';
 
-part 'dashboard_cards.dart';
-
-/// Thousands separator, compiled once and reused (the formatter runs many times
-/// per dashboard render).
+/// Thousands separator, compiled once.
 final _thousandsSep = RegExp(r'(\d)(?=(\d{3})+$)');
 
 /// Strips non-dial characters from a phone number for a `tel:` link.
 final _phoneClean = RegExp(r'[^0-9+]');
 
-/// Home / overview page: greeting + quick stats hero, then result & attendance
-/// summary cards.
-class DashboardPage extends ConsumerWidget {
-  const DashboardPage({super.key});
-
-  // Pull-to-refresh always bypasses the freshness throttle and fetches live.
-  Future<void> _refresh(WidgetRef ref) => Future.wait([
-        ref.read(homeProvider.notifier).load(force: true),
-        ref.read(noticesProvider.notifier).load(force: true),
-        ref.read(resultsProvider.notifier).load(force: true),
-        ref.read(attendanceProvider.notifier).load(force: true),
-      ]);
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final home = ref.watch(homeProvider);
-    final results = ref.watch(resultsProvider);
-    final attendance = ref.watch(attendanceProvider);
-    final auth = ref.watch(authControllerProvider);
-    final roll = auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : null;
-
-    final homeData =
-        home is ResData<HomeSummary> ? home.loaded.data : null;
-
-    // Centralized token-expiry handling: an unauthorized (401) result from ANY
-    // of the core data providers means our token died — log out once. Listening
-    // to only one provider before meant an expiry surfaced via a different
-    // provider was handled inconsistently. logout() is idempotent (it just
-    // clears state), so overlapping triggers are harmless.
-    void onUnauthorized(ResourceState next) {
-      if (next case ResError(unauthorized: true)) {
-        ref
-            .read(authControllerProvider.notifier)
-            .logout(message: 'Your session ended. Please log in again.');
-      }
-    }
-
-    ref.listen(resultsProvider, (_, next) => onUnauthorized(next));
-    ref.listen(attendanceProvider, (_, next) => onUnauthorized(next));
-    ref.listen(homeProvider, (_, next) => onUnauthorized(next));
-
-    // NOTE: UCAM session expiry (409) is now handled GLOBALLY by
-    // SessionExpiredOverlay (a blocking app-wide prompt), so there's no longer a
-    // per-dashboard re-login banner — every screen reacts at once.
-
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () => _refresh(ref),
-        child: CustomScrollView(
-          slivers: [
-            // Sticky header: logo + reload + profile. Stays pinned on scroll.
-            _StickyHeaderBar(
-              onProfile: () => Navigator.of(context)
-                  .push(sharedAxisRoute(const ProfilePage())),
-              onReload: () => _refresh(ref),
-            ),
-            SliverToBoxAdapter(
-              child: _Hero(
-                roll: roll,
-                home: homeData,
-                results: results,
-                attendance: attendance,
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.all(Spacing.lg),
-              sliver: SliverList.list(children: [
-                _DashboardBody(
-                  home: homeData,
-                  results: results,
-                  attendance: attendance,
-                  onRetryResults: () =>
-                      ref.read(resultsProvider.notifier).load(force: true),
-                  onRetryAttendance: () =>
-                      ref.read(attendanceProvider.notifier).load(force: true),
-                ),
-                const SizedBox(height: Spacing.xl),
-                Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.lock_outline,
-                          size: 13,
-                          color: context.scheme.onSurfaceVariant
-                              .withValues(alpha: 0.7)),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          'Live from UCAM · nothing stored on our servers',
-                          textAlign: TextAlign.center,
-                          style: context.text.labelSmall?.copyWith(
-                              color: context.scheme.onSurfaceVariant
-                                  .withValues(alpha: 0.85)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 96), // clear the floating nav bar
-              ]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+String _bdt(double? v) {
+  if (v == null) return '—';
+  final s = v
+      .abs()
+      .toStringAsFixed(0)
+      .replaceAllMapped(_thousandsSep, (m) => '${m[1]},');
+  return '৳ $s';
 }
 
 /// "Monday, 30 June 2026" — formatted without the intl package.
@@ -154,342 +46,535 @@ String _formatToday(DateTime d) {
   return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
 }
 
-/// The semester card's big title — prefer the human name ("Spring 2026"); fall
-/// back to the code, then a dash.
-String _termTitle(Term? t) {
-  final name = t?.name?.trim();
-  if (name != null && name.isNotEmpty) return name;
-  final code = t?.code?.trim();
-  if (code != null && code.isNotEmpty) return code;
-  return '—';
+/// Days from today (midnight) to [date]; negative when past.
+int _daysUntil(DateTime date) {
+  final n = DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
+  return DateTime(date.year, date.month, date.day).difference(today).inDays;
 }
 
-/// The sticky top bar (logo + reload + profile) pinned above the dashboard.
-/// Built on a pinned SliverAppBar so height/clipping are handled correctly
-/// (a hand-rolled SliverPersistentHeader delegate is error-prone to size).
-class _StickyHeaderBar extends ConsumerWidget {
-  final VoidCallback onProfile;
-  final Future<void> Function() onReload;
-  const _StickyHeaderBar({
-    required this.onProfile,
-    required this.onReload,
-  });
+String _relativeDay(int days) {
+  if (days < 0) return 'Past';
+  if (days == 0) return 'Today';
+  if (days == 1) return 'Tomorrow';
+  return 'In $days days';
+}
+
+/// Home: a short greeting, then the day's time-sensitive items (classes,
+/// payment, upcoming dates), the headline figures, notices and the advisor.
+/// Detail lives on the full pages; the home page only summarises and links.
+class DashboardPage extends ConsumerStatefulWidget {
+  const DashboardPage({super.key});
+
+  @override
+  ConsumerState<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends ConsumerState<DashboardPage> {
+  bool _refreshing = false;
+
+  // Pull-to-refresh / reload always bypass the freshness throttle.
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await Future.wait([
+        ref.read(homeProvider.notifier).load(force: true),
+        ref.read(noticesProvider.notifier).load(force: true),
+        ref.read(resultsProvider.notifier).load(force: true),
+        ref.read(attendanceProvider.notifier).load(force: true),
+      ]);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final home = ref.watch(homeProvider);
+    final results = ref.watch(resultsProvider);
+    final attendance = ref.watch(attendanceProvider);
+    final auth = ref.watch(authControllerProvider);
+    final roll = auth is AuthSignedIn && auth.roll.isNotEmpty ? auth.roll : null;
+
+    // Centralized token-expiry handling: a 401 from ANY core provider means
+    // our token died — log out once (logout() is idempotent).
+    void onUnauthorized(ResourceState next) {
+      if (next case ResError(unauthorized: true)) {
+        ref
+            .read(authControllerProvider.notifier)
+            .logout(message: 'Your session ended. Please log in again.');
+      }
+    }
+
+    ref.listen(resultsProvider, (_, next) => onUnauthorized(next));
+    ref.listen(attendanceProvider, (_, next) => onUnauthorized(next));
+    ref.listen(homeProvider, (_, next) => onUnauthorized(next));
+
+    final homeData = home is ResData<HomeSummary> ? home.loaded.data : null;
+    final r = results is ResData<ResultsData> ? results.loaded.data : null;
+    final a =
+        attendance is ResData<AttendanceData> ? attendance.loaded.data : null;
+
+    final left = <Widget>[
+      _TodaySection(home: homeData),
+      _PaymentSection(home: homeData),
+      const _UpcomingSection(),
+    ];
+    final right = <Widget>[
+      _Figures(home: homeData, results: r, attendance: a),
+      const _NoticesSection(),
+      if (homeData?.advisor?.name != null) _AdvisorSection(homeData!.advisor!),
+    ];
+
+    return PageScaffold(
+      title: 'Open Campus',
+      showBack: false,
+      titleWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const BrandIcon(size: 22),
+          const SizedBox(width: Spacing.sm),
+          Flexible(
+            child: Text('Open Campus',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.titleLarge),
+          ),
+        ],
+      ),
+      actions: [
+        _refreshing
+            ? const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 13),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : IconButton(
+                onPressed: _refresh,
+                tooltip: 'Reload data',
+                icon: const Icon(AppIcons.refresh),
+              ),
+        const ProfileButton(),
+      ],
+      onRefresh: _refresh,
+      body: Stacked(
+        children: [
+          _Greeting(home: home, roll: roll, onRetry: _refresh),
+          if (Breakpoints.isExpanded(context))
+            TwoColumn(
+              ratio: 0.58,
+              spacing: Spacing.xl,
+              left: Stacked(children: left),
+              right: Stacked(children: right),
+            )
+          else
+            Stacked(children: [...left, ...right]),
+        ],
+      ),
+    );
+  }
+}
+
+class _Greeting extends StatelessWidget {
+  final ResourceState<HomeSummary> home;
+  final String? roll;
+  final VoidCallback onRetry;
+  const _Greeting({required this.home, required this.roll, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = home is ResData<HomeSummary>
+        ? (home as ResData<HomeSummary>).loaded.data
+        : null;
+    final name = data?.name?.trim();
+    final hasName = name != null && name.isNotEmpty;
+    final greeting = hasName ? 'Welcome back, ${name.split(' ').first}' : 'Welcome';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (home case ResData<HomeSummary>(:final loaded, :final staleReason)
+            when loaded.freshness == Freshness.cached)
+          FreshnessLine(
+            at: loaded.syncedAt,
+            error: staleReason,
+            onRetry: staleReason != null ? onRetry : null,
+          ),
+        Text(greeting, style: context.text.titleMedium),
+        const SizedBox(height: Spacing.xxs),
+        Text(_formatToday(DateTime.now()), style: context.text.bodySmall),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Today's classes
+// ---------------------------------------------------------------------------
+
+const _dayNames = {
+  DateTime.saturday: 'Saturday',
+  DateTime.sunday: 'Sunday',
+  DateTime.monday: 'Monday',
+  DateTime.tuesday: 'Tuesday',
+  DateTime.wednesday: 'Wednesday',
+  DateTime.thursday: 'Thursday',
+  DateTime.friday: 'Friday',
+};
+
+class _TodaySection extends StatelessWidget {
+  final HomeSummary? home;
+  const _TodaySection({required this.home});
+
+  @override
+  Widget build(BuildContext context) {
+    final today = _dayNames[DateTime.now().weekday];
+    final sessions = (home?.routine ?? const <ClassSession>[])
+        .where((s) => s.day == today)
+        .toList();
+
+    return Section(
+      title: 'Today',
+      trailing: TextButton(
+        onPressed: () =>
+            Navigator.of(context).push(appRoute(const ClassRoutinePage())),
+        child: const Text('Show routine'),
+      ),
+      child: home == null
+          ? const LoadingState(verticalPadding: Spacing.lg)
+          : sessions.isEmpty
+              ? const Panel(
+                  padding: EdgeInsets.zero,
+                  child: EmptyState(
+                    icon: AppIcons.today,
+                    title: 'No classes today',
+                    compact: true,
+                  ),
+                )
+              : RowGroup(
+                  children: [
+                    for (final s in sessions)
+                      ListRow(
+                        icon: AppIcons.course,
+                        title:
+                            '${s.courseCode}${s.section != null ? ' · ${s.section}' : ''}',
+                        value: s.start != null && s.end != null
+                            ? '${s.start} – ${s.end}'
+                            : null,
+                        chevron: false,
+                      ),
+                  ],
+                ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Payment
+// ---------------------------------------------------------------------------
+
+class _PaymentSection extends ConsumerWidget {
+  final HomeSummary? home;
+  const _PaymentSection({required this.home});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = context.scheme;
-    // Watch the avatar HERE (not in DashboardPage.build) so an avatar
-    // load/refresh rebuilds only this bar, not the whole page.
-    final avatarBytes = ref.watch(avatarProvider).value;
-    return SliverAppBar(
-      pinned: true,
-      backgroundColor: scheme.surface,
-      surfaceTintColor: Colors.transparent,
-      scrolledUnderElevation: 0,
-      automaticallyImplyLeading: false,
-      // Transparent, theme-aware status bar (follows the app theme, not the OS).
-      systemOverlayStyle:
-          appBarOverlayStyle(Theme.of(context).brightness == Brightness.dark),
-      titleSpacing: Spacing.lg,
-      toolbarHeight: 64,
-      title: Row(
+    final p = context.palette;
+    final hasDue = home?.hasDue ?? false;
+    final cal =
+        ref.watch(academicCalendarProvider).asData?.value.defaultCalendar;
+    final next = cal?.activeInstallment;
+    final days = next != null ? _daysUntil(next.deadline) : null;
+    final deadlineSoon = days != null && days <= 14;
+
+    void openBill() =>
+        Navigator.of(context).push(appRoute(const BillPage()));
+
+    if (home == null) return const SizedBox.shrink();
+
+    if (!hasDue && !deadlineSoon) {
+      return RowGroup(
         children: [
-          // The brand icon on the neutral app-bar surface (never on a colored
-          // tile), with the wordmark as text beside it.
-          const BrandIcon(size: 28),
-          const SizedBox(width: Spacing.sm),
-          Text('Open Campus',
-              style: context.text.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-          const Spacer(),
-          _ReloadButton(onReload: onReload),
-          const SizedBox(width: Spacing.sm),
-          Semantics(
-            button: true,
-            label: 'Profile',
-            child: Tooltip(
-              message: 'Profile',
-              child: SpringTap(
-                onTap: onProfile,
-                borderRadius: BorderRadius.circular(999),
-                child: Avatar(bytes: avatarBytes, radius: 22),
-              ),
-            ),
+          ListRow(
+            icon: AppIcons.dues,
+            title: 'Tuition: no dues',
+            subtitle: next != null
+                ? '${next.ordinalLabel} installment due ${next.dateText}'
+                : null,
+            onTap: openBill,
           ),
         ],
+      );
+    }
+
+    final tone = days == null
+        ? StatusTone.neutral
+        : days < 0
+            ? StatusTone.danger
+            : days <= 7
+                ? StatusTone.warning
+                : StatusTone.neutral;
+    final badge = days == null
+        ? null
+        : days < 0
+            ? 'Overdue'
+            : days == 0
+                ? 'Due today'
+                : 'Due in $days day${days == 1 ? '' : 's'}';
+
+    return Section(
+      title: 'Payment',
+      trailing: TextButton(onPressed: openBill, child: const Text('View bill')),
+      child: Panel(
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.lg, vertical: Spacing.sm),
+        onTap: openBill,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            KeyValueRow(
+              label: 'Amount due',
+              value: hasDue ? _bdt(home!.dueAmount) : 'No dues',
+              emphasize: true,
+              valueColor: hasDue ? p.warningInk : p.successInk,
+            ),
+            if (next != null) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${next.ordinalLabel} installment',
+                              style: context.text.bodyMedium?.copyWith(
+                                  color: context.scheme.onSurfaceVariant)),
+                          Text(next.dateText, style: context.text.bodySmall),
+                        ],
+                      ),
+                    ),
+                    if (badge != null) StatusBadge(badge, tone: tone),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Hero extends StatelessWidget {
-  final String? roll;
-  final HomeSummary? home;
-  final ResourceState<ResultsData> results;
-  final ResourceState<AttendanceData> attendance;
+// ---------------------------------------------------------------------------
+// Upcoming academic-calendar events
+// ---------------------------------------------------------------------------
 
-  const _Hero({
-    required this.roll,
+class _UpcomingSection extends ConsumerWidget {
+  const _UpcomingSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(academicCalendarProvider);
+    final cal = async.asData?.value.defaultCalendar;
+    final events = cal?.nextEvents(3) ?? const <CalendarEvent>[];
+
+    void openCalendar() =>
+        Navigator.of(context).push(appRoute(const CalendarPage()));
+
+    final Widget body;
+    if (async.isLoading) {
+      body = const LoadingState(verticalPadding: Spacing.lg);
+    } else if (async.hasError) {
+      body = Text('Couldn’t load the academic calendar.',
+          style: context.text.bodySmall);
+    } else if (events.isEmpty) {
+      body = Text('No upcoming events.', style: context.text.bodySmall);
+    } else {
+      body = RowGroup(
+        children: [
+          for (final e in events)
+            ListRow(
+              icon: e.icon,
+              title: e.title,
+              subtitle: e.dateText,
+              value: _relativeDay(_daysUntil(e.date)),
+              onTap: openCalendar,
+              chevron: false,
+            ),
+        ],
+      );
+    }
+
+    return Section(
+      title: 'Upcoming',
+      trailing: TextButton(
+          onPressed: openCalendar, child: const Text('Show calendar')),
+      child: body,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Headline figures
+// ---------------------------------------------------------------------------
+
+class _Figures extends StatelessWidget {
+  final HomeSummary? home;
+  final ResultsData? results;
+  final AttendanceData? attendance;
+  const _Figures({
     required this.home,
     required this.results,
     required this.attendance,
   });
 
-  ResultsData? get _r => results is ResData<ResultsData>
-      ? (results as ResData<ResultsData>).loaded.data
-      : null;
-  AttendanceData? get _a => attendance is ResData<AttendanceData>
-      ? (attendance as ResData<AttendanceData>).loaded.data
-      : null;
-
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final r = _r;
-    final a = _a;
-    // Prefer the live home summary's CGPA; fall back to results.
+    final r = results;
     final cgpa = home?.cgpa ??
         r?.latestCgpa ??
         (r != null && r.semesters.isNotEmpty ? r.semesters.first.cgpa : null);
-    final att = a != null ? overallAttendancePct(a) : null;
-    final attended = a != null ? attendedClasses(a) : null;
-    final totalCls = a != null ? totalClasses(a) : null;
+    final att = attendance != null ? overallAttendancePct(attendance!) : null;
     final credits = home?.completedCredits;
-    final currentTerm = home?.currentTerm;
-    final nextTerm = home?.nextTerms.isNotEmpty == true
-        ? home!.nextTerms.first
-        : null;
 
-    // Real name from /student/home; greeting falls back gracefully while
-    // loading or if the backend sends an empty name (treat blank as absent).
-    final realName = home?.name?.trim();
-    final hasName = realName != null && realName.isNotEmpty;
-    final firstName =
-        hasName ? realName.split(' ').first : (roll != null ? 'Student' : 'Welcome');
+    void go(Widget page) => Navigator.of(context).push(appRoute(page));
 
-    return Container(
-      color: scheme.surface,
-      // The sticky header occupies the top; start the greeting just below it.
-      padding: const EdgeInsets.fromLTRB(
-          Spacing.lg, Spacing.sm, Spacing.lg, Spacing.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(hasName ? 'Welcome back,' : 'Welcome',
-              style: context.text.bodyMedium
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
-          Text(firstName,
-              style: context.text.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          // Today's date in the accent color (blue on the default theme).
-          Text(_formatToday(DateTime.now()),
-              style: context.text.titleSmall?.copyWith(
-                  color: scheme.secondary, fontWeight: FontWeight.w700)),
-          const SizedBox(height: Spacing.xl),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Card 1 — current semester (filled blue).
-                Expanded(
-                  child: _HeroCard(
-                    icon: Icons.calendar_today_rounded,
-                    caption: 'Current term',
-                    bigValue: _termTitle(currentTerm),
-                    subLabel: 'Next',
-                    subValue: nextTerm?.code ?? nextTerm?.name ?? '—',
-                    filled: true,
-                    accent: scheme.secondary,
-                  ),
-                ),
-                const SizedBox(width: Spacing.md),
-                // Card 2 — CGPA (filled orange).
-                Expanded(
-                  child: _HeroCard(
-                    icon: Icons.workspace_premium,
-                    caption: 'CGPA',
-                    bigValue: cgpa?.toStringAsFixed(2) ?? '—',
-                    subLabel: 'Credits',
-                    subValue: credits?.toStringAsFixed(0) ?? '—',
-                    filled: true,
-                    accent: scheme.primary,
-                  ),
-                ),
-                const SizedBox(width: Spacing.md),
-                // Card 3 — attendance (clean white card).
-                Expanded(
-                  child: _HeroCard(
-                    icon: Icons.event_available,
-                    caption: 'Attendance',
-                    bigValue:
-                        att != null ? '${att.toStringAsFixed(0)}%' : '—',
-                    subLabel: 'Classes',
-                    subValue: (attended != null && totalCls != null)
-                        ? '$attended/$totalCls'
-                        : '—',
-                    filled: false,
-                    accent: scheme.secondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return StatStrip(items: [
+      StatBlock(
+        label: 'CGPA',
+        value: cgpa?.toStringAsFixed(2) ?? '—',
+        onTap: () => go(const ResultsPage()),
       ),
-    );
-  }
-}
-
-/// A circular reload button beside the profile avatar. Spins while a refresh is
-/// in flight and is disabled meanwhile, so a tap can't stack duplicate fetches.
-/// Read-only — it only re-pulls the same data the page already shows.
-class _ReloadButton extends StatefulWidget {
-  final Future<void> Function() onReload;
-  const _ReloadButton({required this.onReload});
-
-  @override
-  State<_ReloadButton> createState() => _ReloadButtonState();
-}
-
-class _ReloadButtonState extends State<_ReloadButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _spin =
-      AnimationController(vsync: this, duration: const Duration(seconds: 1));
-  bool _busy = false;
-
-  @override
-  void dispose() {
-    _spin.dispose();
-    super.dispose();
-  }
-
-  Future<void> _go() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    _spin.repeat();
-    HapticFeedback.lightImpact();
-    try {
-      await widget.onReload();
-    } finally {
-      if (mounted) {
-        _spin.stop();
-        _spin.animateTo(_spin.value.ceilToDouble(),
-            duration: const Duration(milliseconds: 200));
-        setState(() => _busy = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Tooltip(
-      message: 'Reload data',
-      child: SpringTap(
-        onTap: _busy ? null : _go,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            shape: BoxShape.circle,
-          ),
-          child: RotationTransition(
-            turns: _spin,
-            child: Icon(Icons.refresh_rounded,
-                size: 20, color: scheme.onSurfaceVariant),
-          ),
-        ),
+      StatBlock(
+        label: 'Credits',
+        value: credits?.toStringAsFixed(0) ?? '—',
+        onTap: () => go(const ResultsPage()),
       ),
-    );
-  }
-}
-
-/// The scrollable card stack below the hero. On phones it's a single staggered
-/// column (original order); on wide screens it splits into two balanced columns
-/// so the dashboard fills desktop width instead of running as one long strip.
-class _DashboardBody extends StatelessWidget {
-  final HomeSummary? home;
-  final ResourceState<ResultsData> results;
-  final ResourceState<AttendanceData> attendance;
-  final VoidCallback onRetryResults;
-  final VoidCallback onRetryAttendance;
-  const _DashboardBody({
-    required this.home,
-    required this.results,
-    required this.attendance,
-    required this.onRetryResults,
-    required this.onRetryAttendance,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const notices = _NoticesCard();
-    final resultsCard = Builder(builder: (context) {
-      return ResourceSection<ResultsData>(
-        title: 'Results',
-        icon: Icons.school_outlined,
-        state: results,
-        loadingSkeleton: const CardSkeleton(chart: true),
-        builder: (d) => ResultsContent(d),
-        onRetry: onRetryResults,
-        onOpen: () =>
-            Navigator.of(context).push(sharedAxisRoute(const ResultsPage())),
-      );
-    });
-    final attendanceCard = Builder(builder: (context) {
-      return ResourceSection<AttendanceData>(
-        title: 'Attendance',
-        icon: Icons.event_available_outlined,
-        state: attendance,
-        loadingSkeleton: const CardSkeleton(lines: 4),
-        builder: (d) => AttendanceContent(d),
-        onRetry: onRetryAttendance,
-        onOpen: () => Navigator.of(context)
-            .push(sharedAxisRoute(const AttendancePage())),
-      );
-    });
-
-    if (Breakpoints.isDesktop(context)) {
-      // Upcoming is paired equal-height with Today's classes. Today shows ALL of
-      // today's classes (1..n), so match Upcoming's event count to it — otherwise
-      // a day with 3-4 classes leaves Upcoming (fixed at 2) with empty space.
-      // At least 2 so a light class day doesn't shrink Upcoming below its norm.
-      final todayCount = _TodayCard.todaysClasses(home).length;
-      final upcomingCount = todayCount > 2 ? todayCount : 2;
-
-      // The top four summary cards share ONE height so the 2×2 block is even;
-      // Each ROW is equal-height (so its two cards align), but rows size to
-      // their own content — Payment/Advisor (less info) sit shorter than
-      // Upcoming/Today rather than all four sharing one tall height.
-      return _StaggerColumn(children: [
-        _Pair(
-          equalHeight: true,
-          left: _UpcomingCard(fill: true, count: upcomingCount),
-          right: _TodayCard(home: home, fill: true),
-        ),
-        _Pair(
-          equalHeight: true,
-          left: _PaymentCard(home: home, fill: true),
-          right: _AdvisorCard(home: home, fill: true),
-        ),
-        _Pair(left: resultsCard, right: attendanceCard),
-        notices,
-      ]);
-    }
-
-    // Mobile: single stacked column (cards shrink-wrap their content).
-    return _StaggerColumn(children: [
-      const _UpcomingCard(),
-      _TodayCard(home: home),
-      _PaymentCard(home: home),
-      _AdvisorCard(home: home),
-      notices,
-      resultsCard,
-      attendanceCard,
+      StatBlock(
+        label: 'Attendance',
+        value: att != null ? '${att.toStringAsFixed(0)}%' : '—',
+        onTap: () => go(const AttendancePage()),
+      ),
     ]);
   }
 }
 
+// ---------------------------------------------------------------------------
+// Notices (UCAM student notices)
+// ---------------------------------------------------------------------------
+
+class _NoticesSection extends ConsumerWidget {
+  const _NoticesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(noticesProvider);
+    if (state is ResLoading<NoticesData>) {
+      return const Section(
+          title: 'Notices',
+          child: LoadingState(verticalPadding: Spacing.lg));
+    }
+    final notices = state is ResData<NoticesData>
+        ? state.loaded.data.notices
+        : const <Notice>[];
+    if (notices.isEmpty) return const SizedBox.shrink();
+
+    final shown = notices.take(4).toList();
+    return Section(
+      title: 'Notices',
+      child: RowGroup(
+        children: [
+          for (final n in shown)
+            ListRow(
+              icon: AppIcons.notices,
+              title: n.title ?? 'Notice',
+              subtitle: [n.postedBy ?? '', n.when]
+                  .where((s) => s.isNotEmpty)
+                  .join(' · '),
+              chevron: false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Academic advisor
+// ---------------------------------------------------------------------------
+
+class _AdvisorSection extends StatelessWidget {
+  final Advisor advisor;
+  const _AdvisorSection(this.advisor);
+
+  Future<void> _email(BuildContext context, String address) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: address,
+      query: 'subject=${Uri.encodeComponent('Advising')}',
+    );
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn’t open your email app.')),
+      );
+    }
+  }
+
+  Future<void> _call(BuildContext context, String number) async {
+    final cleaned = number.replaceAll(_phoneClean, '');
+    final ok = await launchUrl(Uri(scheme: 'tel', path: cleaned),
+        mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn’t open the phone app.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final email = advisor.email;
+    final phone = advisor.phone;
+    final hasEmail = email != null && email.isNotEmpty;
+    final hasPhone = phone != null && phone.isNotEmpty;
+    final room = advisor.room;
+    return RowGroup(
+      title: 'Academic advisor',
+      children: [
+        ListRow(
+          icon: AppIcons.advisor,
+          title: advisor.name!,
+          subtitle: room != null && room.isNotEmpty ? 'Room $room' : null,
+          chevron: false,
+          trailing: (hasEmail || hasPhone)
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasEmail)
+                      IconButton(
+                        tooltip: 'Email $email',
+                        onPressed: () => _email(context, email),
+                        icon: const Icon(AppIcons.email, size: 20),
+                      ),
+                    if (hasPhone)
+                      IconButton(
+                        tooltip: 'Call $phone',
+                        onPressed: () => _call(context, phone),
+                        icon: const Icon(AppIcons.phone, size: 20),
+                      ),
+                  ],
+                )
+              : null,
+        ),
+      ],
+    );
+  }
+}

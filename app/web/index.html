@@ -77,26 +77,25 @@
     #boot-loader {
       position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; z-index: 9999;
-      background: #FFFFFF; color: #14181F;
+      background: #FFFFFF; color: #16191E;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     /* The brand icon renders on its own (its blue+orange sit on the neutral boot
        surface). No colored tile behind it — the mark is never placed on an
        orange or blue background. */
     #boot-loader .logo {
       display: flex; align-items: center; justify-content: center; }
-    #boot-loader .logo svg { width: 88px; height: 88px;
-      filter: drop-shadow(0 8px 22px rgba(1,186,221,.20)); }
+    #boot-loader .logo svg { width: 72px; height: 72px; }
     #boot-loader .title {
-      margin-top: 24px; font-size: 26px; font-weight: 700; letter-spacing: -.3px; }
+      margin-top: 24px; font-size: 20px; font-weight: 600; }
     #boot-loader .desc {
-      margin-top: 8px; font-size: 14px; opacity: .65; text-align: center;
+      margin-top: 6px; font-size: 14px; color: #5C6470; text-align: center;
       max-width: 280px; line-height: 1.45; }
     #boot-loader .bar {
-      margin-top: 32px; width: 200px; height: 4px; border-radius: 999px;
-      background: rgba(255,128,7,.18); overflow: hidden; position: relative; }
+      margin-top: 32px; width: 160px; height: 3px; border-radius: 2px;
+      background: #E5E9ED; overflow: hidden; position: relative; }
     #boot-loader .bar::before {
       content: ''; position: absolute; left: 0; top: 0; height: 100%;
-      width: 40%; border-radius: 999px; background: #FF8007;
+      width: 40%; border-radius: 2px; background: #B85C00;
       animation: boot-slide 1.25s ease-in-out infinite; }
     @keyframes boot-slide {
       0%   { left: -40%; width: 40%; }
@@ -111,8 +110,8 @@
         <path d="M55.37 43.3c19.1-13.53 44.43-11.7 61.35 4.06 4.04 3.77 7.36 8.12 9.9 12.85l32.25-13.07a84.3 84.3 0 0 0-17.78-24.4C126.72 9.05 107.49 1.12 87.78.11 46.44-2 10.22 26.22 1.75 66.68c-5.95 28.43 3.52 58.33 24.75 78.48 13.22 12.17 29.86 19.95 47.76 22.1v-34.03c-21.45-4.69-36.97-22.33-39.45-43.91-.02-3.7-.33-7.18.07-10.93 1.51-14.04 8.88-26.87 20.49-35.09Z" fill="#01badd"/>
       </svg>
     </div>
-    <div class="title">Welcome to Open Campus</div>
-    <div class="desc">Your campus made simple: results, attendance, routine and dues.</div>
+    <div class="title">Open Campus</div>
+    <div class="desc">Loading your campus…</div>
     <div class="bar"></div>
   </div>
   <script>

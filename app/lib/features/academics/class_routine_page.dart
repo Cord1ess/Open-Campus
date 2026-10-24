@@ -8,7 +8,6 @@ import '../../shared/widgets.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/home_model.dart';
 import '../dashboard/resource_view.dart';
-import '../common/collapsing_title.dart';
 import 'ics_export.dart';
 import 'routine_schedule.dart';
 
@@ -22,6 +21,22 @@ const _dayOrder = [
   'Friday',
 ];
 
+String _weekdayName(int weekday) => const {
+      DateTime.saturday: 'Saturday',
+      DateTime.sunday: 'Sunday',
+      DateTime.monday: 'Monday',
+      DateTime.tuesday: 'Tuesday',
+      DateTime.wednesday: 'Wednesday',
+      DateTime.thursday: 'Thursday',
+      DateTime.friday: 'Friday',
+    }[weekday]!;
+
+String _sessionTitle(ClassSession s) =>
+    '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}';
+
+String? _sessionTime(ClassSession s) =>
+    s.start != null && s.end != null ? '${s.start} – ${s.end}' : null;
+
 /// Weekly class routine, grouped by day, with a live "next class" countdown and
 /// an .ics export. Routine data is part of /student/home.
 class ClassRoutinePage extends ConsumerWidget {
@@ -30,35 +45,15 @@ class ClassRoutinePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(homeProvider);
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(homeProvider.notifier).load(force: true),
-        child: CustomScrollView(
-          slivers: [
-            const SliverCollapsingAppBar(title: 'Class Routine'),
-            SliverPadding(
-              padding: const EdgeInsets.all(Spacing.lg),
-              sliver: SliverList.list(children: [
-                switch (state) {
-                  ResLoading() => const SectionCard(
-                      title: 'Class Routine',
-                      icon: Icons.calendar_view_week_outlined,
-                      child: CardSkeleton(label: 'Loading your routine…')),
-                  ResError(:final message) => StateMessage(
-                      icon: Icons.cloud_off,
-                      title: 'Couldn’t load',
-                      subtitle: message,
-                      actionLabel: 'Try again',
-                      onAction: () =>
-                          ref.read(homeProvider.notifier).load(force: true),
-                    ),
-                  ResData(:final loaded) => _Content(loaded.data.routine),
-                },
-                const SizedBox(height: 96),
-              ]),
-            ),
-          ],
-        ),
+    return PageScaffold(
+      title: 'Class Routine',
+      onRefresh: () => ref.read(homeProvider.notifier).load(force: true),
+      body: ResourceBody<HomeSummary>(
+        state: state,
+        loadingLabel: 'Loading your routine…',
+        errorTitle: 'Couldn’t load your routine',
+        onRetry: () => ref.read(homeProvider.notifier).load(force: true),
+        builder: (d) => _Content(d.routine),
       ),
     );
   }
@@ -71,14 +66,10 @@ class _Content extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (routine.isEmpty) {
-      return const SectionCard(
-        title: 'Class Routine',
-        icon: Icons.calendar_view_week_outlined,
-        child: StateMessage(
-            icon: Icons.event_busy_outlined,
-            title: 'No routine',
-            subtitle: 'No class schedule is published yet.'),
-      );
+      return const EmptyState(
+          icon: AppIcons.routine,
+          title: 'No routine',
+          message: 'No class schedule is published yet.');
     }
     final byDay = <String, List<ClassSession>>{};
     for (final s in routine) {
@@ -95,54 +86,45 @@ class _Content extends StatelessWidget {
     final days = _dayOrder.where(byDay.containsKey).toList();
     final todayName = _weekdayName(DateTime.now().weekday);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stacked(
       children: [
-        FadeSlideIn(child: _NextClassHero(routine)),
-        const SizedBox(height: Spacing.lg),
-        FadeSlideIn(delayMs: 60, child: _ExportRow(routine)),
-        const SizedBox(height: Spacing.lg),
-        for (final (i, day) in days.indexed) ...[
-          if (i > 0) const SizedBox(height: Spacing.lg),
-          FadeSlideIn(
-            delayMs: 100 + i * 40,
-            child: _DayCard(
-              day: day,
-              sessions: byDay[day]!,
-              isToday: day == todayName,
-            ),
-          ),
-        ],
+        _NextClassPanel(routine),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _ExportButton(routine),
+        ),
+        ResponsiveGrid(
+          maxColumns: 2,
+          stretch: false,
+          spacing: Spacing.xl,
+          runSpacing: Spacing.xl,
+          children: [
+            for (final day in days)
+              _DayGroup(
+                day: day,
+                sessions: byDay[day]!,
+                isToday: day == todayName,
+              ),
+          ],
+        ),
       ],
     );
   }
-
-  static String _weekdayName(int weekday) => const {
-        DateTime.saturday: 'Saturday',
-        DateTime.sunday: 'Sunday',
-        DateTime.monday: 'Monday',
-        DateTime.tuesday: 'Tuesday',
-        DateTime.wednesday: 'Wednesday',
-        DateTime.thursday: 'Thursday',
-        DateTime.friday: 'Friday',
-      }[weekday]!;
 }
 
-/// Gradient hero showing the next class with a live countdown (or an "in class
-/// now" state). Ticks every second.
-class _NextClassHero extends StatefulWidget {
+/// Next class with a live countdown (or an "in class now" state). Only the
+/// countdown text listens to the per-second tick.
+class _NextClassPanel extends StatefulWidget {
   final List<ClassSession> routine;
-  const _NextClassHero(this.routine);
+  const _NextClassPanel(this.routine);
 
   @override
-  State<_NextClassHero> createState() => _NextClassHeroState();
+  State<_NextClassPanel> createState() => _NextClassPanelState();
 }
 
-class _NextClassHeroState extends State<_NextClassHero>
+class _NextClassPanelState extends State<_NextClassPanel>
     with WidgetsBindingObserver {
   Timer? _ticker;
-  // Only the countdown text listens to this — the gradient shell and the
-  // expensive routine scan do NOT rebuild every second.
   final _now = ValueNotifier<DateTime>(DateTime.now());
 
   @override
@@ -165,8 +147,7 @@ class _NextClassHeroState extends State<_NextClassHero>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Pause the per-second tick while the app is backgrounded — no point
-    // updating a countdown nobody can see (battery/CPU).
+    // Pause the per-second tick while the app is backgrounded.
     if (state == AppLifecycleState.resumed) {
       _now.value = DateTime.now();
       _startTicker();
@@ -186,64 +167,53 @@ class _NextClassHeroState extends State<_NextClassHero>
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final accent = scheme.primary;
-    final onAcc = scheme.onPrimary;
-
-    // The gradient shell is built ONCE per real change (theme/routine), not per
-    // tick. The ticking value only flows into the countdown Text below.
-    return Container(
-      padding: const EdgeInsets.all(Spacing.xl),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [accent, Color.lerp(accent, Colors.black, 0.18)!],
-        ),
-        borderRadius: BorderRadius.circular(Radii.lg),
-      ),
+    return Panel(
       child: ValueListenableBuilder<DateTime>(
         valueListenable: _now,
         builder: (context, now, _) {
-          final ongoing = widget.routine.where((s) => isOngoing(s, now)).toList();
+          final ongoing =
+              widget.routine.where((s) => isOngoing(s, now)).toList();
           final next = nextClass(widget.routine, now);
           if (ongoing.isNotEmpty) {
             final s = ongoing.first;
-            return _heroBody(context, onAcc,
+            return _body(context,
                 kicker: 'In class now',
-                title:
-                    '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
-                sub: s.start != null && s.end != null
-                    ? '${s.start} – ${s.end}'
-                    : null,
-                big: 'LIVE');
+                title: _sessionTitle(s),
+                sub: _sessionTime(s),
+                trailing: const StatusBadge('Now', tone: StatusTone.success));
           }
           if (next != null) {
             final s = next.session;
-            return _heroBody(context, onAcc,
+            return _body(context,
                 kicker: 'Next class · ${_dayLabel(next.start, now)}',
-                title:
-                    '${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
-                sub: s.start != null && s.end != null
-                    ? '${s.start} – ${s.end}'
-                    : null,
-                big: _fmtCountdown(next.start.difference(now)));
+                title: _sessionTitle(s),
+                sub: _sessionTime(s),
+                trailing: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_fmtCountdown(next.start.difference(now)),
+                        style: context.text.titleLarge
+                            ?.copyWith(fontFeatures: tabularFigures)),
+                    Text('remaining', style: context.text.bodySmall),
+                  ],
+                ));
           }
-          return _heroBody(context, onAcc,
+          return _body(context,
               kicker: 'Class routine',
               title: 'No upcoming classes',
               sub: null,
-              big: null);
+              trailing: null);
         },
       ),
     );
   }
 
-  Widget _heroBody(BuildContext context, Color onAcc,
+  Widget _body(BuildContext context,
       {required String kicker,
       required String title,
       String? sub,
-      String? big}) {
+      Widget? trailing}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -251,40 +221,18 @@ class _NextClassHeroState extends State<_NextClassHero>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(kicker.toUpperCase(),
-                  style: context.text.labelSmall?.copyWith(
-                      color: onAcc.withValues(alpha: 0.85),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5)),
-              const SizedBox(height: 4),
-              Text(title,
-                  style: context.text.titleLarge
-                      ?.copyWith(color: onAcc, fontWeight: FontWeight.w800)),
-              if (sub != null) ...[
-                const SizedBox(height: 2),
-                Text(sub,
-                    style: context.text.bodySmall
-                        ?.copyWith(color: onAcc.withValues(alpha: 0.85))),
-              ],
+              Text(kicker,
+                  style: context.text.labelMedium
+                      ?.copyWith(color: context.scheme.onSurfaceVariant)),
+              const SizedBox(height: Spacing.xxs),
+              Text(title, style: context.text.titleMedium),
+              if (sub != null) Text(sub, style: context.text.bodySmall),
             ],
           ),
         ),
-        if (big != null) ...[
-          const SizedBox(width: Spacing.md),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(big,
-                  style: context.text.headlineSmall?.copyWith(
-                      color: onAcc,
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: const [FontFeature.tabularFigures()])),
-              if (big != 'LIVE')
-                Text('remaining',
-                    style: context.text.labelSmall
-                        ?.copyWith(color: onAcc.withValues(alpha: 0.8))),
-            ],
-          ),
+        if (trailing != null) ...[
+          const SizedBox(width: Spacing.lg),
+          trailing,
         ],
       ],
     );
@@ -296,7 +244,7 @@ class _NextClassHeroState extends State<_NextClassHero>
     final diff = d.difference(today).inDays;
     if (diff == 0) return 'today';
     if (diff == 1) return 'tomorrow';
-    return _Content._weekdayName(when.weekday);
+    return _weekdayName(when.weekday);
   }
 
   String _fmtCountdown(Duration d) {
@@ -313,16 +261,16 @@ class _NextClassHeroState extends State<_NextClassHero>
   }
 }
 
-/// Export-the-routine action row.
-class _ExportRow extends StatefulWidget {
+/// Export-the-routine action.
+class _ExportButton extends StatefulWidget {
   final List<ClassSession> routine;
-  const _ExportRow(this.routine);
+  const _ExportButton(this.routine);
 
   @override
-  State<_ExportRow> createState() => _ExportRowState();
+  State<_ExportButton> createState() => _ExportButtonState();
 }
 
-class _ExportRowState extends State<_ExportRow> {
+class _ExportButtonState extends State<_ExportButton> {
   bool _busy = false;
 
   Future<void> _export() async {
@@ -340,27 +288,24 @@ class _ExportRowState extends State<_ExportRow> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _busy ? null : _export,
-        icon: _busy
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.calendar_month_outlined, size: 18),
-        label: Text(_busy ? 'Exporting…' : 'Export routine (.ics)'),
-      ),
+    return OutlinedButton.icon(
+      onPressed: _busy ? null : _export,
+      icon: _busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(AppIcons.download, size: 18),
+      label: Text(_busy ? 'Exporting…' : 'Export routine (.ics)'),
     );
   }
 }
 
-class _DayCard extends StatelessWidget {
+class _DayGroup extends StatelessWidget {
   final String day;
   final List<ClassSession> sessions;
   final bool isToday;
-  const _DayCard({
+  const _DayGroup({
     required this.day,
     required this.sessions,
     required this.isToday,
@@ -368,140 +313,41 @@ class _DayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
     final now = DateTime.now();
-    return SectionCard(
+    return RowGroup(
       title: day,
-      icon: Icons.today_outlined,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('${sessions.length} class${sessions.length == 1 ? '' : 'es'}',
-              style: context.text.labelSmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          Text('${sessions.length} class${sessions.length == 1 ? '' : 'es'}'),
           if (isToday) ...[
             const SizedBox(width: Spacing.sm),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text('Today',
-                  style: context.text.labelSmall?.copyWith(
-                      color: scheme.onPrimary, fontWeight: FontWeight.w800)),
-            ),
+            const StatusBadge('Today', tone: StatusTone.accent),
           ],
         ],
       ),
-      child: Column(
-        children: [
-          for (var i = 0; i < sessions.length; i++) ...[
-            if (i > 0)
-              Divider(height: Spacing.lg, color: scheme.outlineVariant),
-            _SessionRow(sessions[i],
-                ongoing: isToday && isOngoing(sessions[i], now)),
-          ],
-        ],
-      ),
+      children: [
+        for (final s in sessions)
+          ClassSessionRow(s, ongoing: isToday && isOngoing(s, now)),
+      ],
     );
   }
 }
 
-/// One class session in the routine. Highlights the live class.
-class _SessionRow extends StatelessWidget {
-  final ClassSession s;
-  final bool ongoing;
-  const _SessionRow(this.s, {this.ongoing = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final accent = ongoing ? scheme.secondary : scheme.primary;
-    return Container(
-      padding: ongoing ? const EdgeInsets.all(Spacing.sm) : EdgeInsets.zero,
-      decoration: ongoing
-          ? BoxDecoration(
-              color: scheme.secondary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(Radii.sm),
-            )
-          : null,
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 40,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: Spacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
-                    style: context.text.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                if (s.start != null && s.end != null)
-                  Text('${s.start} – ${s.end}',
-                      style: context.text.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          if (ongoing)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: scheme.secondary,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text('NOW',
-                  style: context.text.labelSmall?.copyWith(
-                      color: scheme.onSecondary, fontWeight: FontWeight.w800)),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One class session row — reused by the home "Today" card too.
+/// One class session row — also used by the home "Today" card.
 class ClassSessionRow extends StatelessWidget {
   final ClassSession s;
-  const ClassSessionRow(this.s, {super.key});
+  final bool ongoing;
+  const ClassSessionRow(this.s, {super.key, this.ongoing = false});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 38,
-          decoration: BoxDecoration(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: Spacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${s.courseCode}${s.section != null ? ' (${s.section})' : ''}',
-                  style: context.text.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-              if (s.start != null && s.end != null)
-                Text('${s.start} – ${s.end}',
-                    style: context.text.bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-          ),
-        ),
-      ],
+    return ListRow(
+      title: _sessionTitle(s),
+      value: _sessionTime(s),
+      chevron: false,
+      trailing:
+          ongoing ? const StatusBadge('Now', tone: StatusTone.success) : null,
     );
   }
 }
