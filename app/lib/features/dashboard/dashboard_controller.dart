@@ -35,10 +35,14 @@ class ResLoading<T> extends ResourceState<T> {
 
 class ResData<T> extends ResourceState<T> {
   final Loaded<T> loaded;
-  /// True when the live fetch failed and we're showing device cache; if the
-  /// failure was a session-expiry, the dashboard also shows a re-login banner.
+  /// True when the live fetch failed because the UCAM session expired and we're
+  /// showing the device cache.
   final bool sessionExpired;
-  const ResData(this.loaded, {this.sessionExpired = false});
+  /// When a live refresh FAILED and the on-device copy is being shown instead,
+  /// the reason (network / portal error). Null for a fresh cached read within
+  /// the freshness window or for live data. Surfaced by the freshness line.
+  final String? staleReason;
+  const ResData(this.loaded, {this.sessionExpired = false, this.staleReason});
 }
 
 class ResError<T> extends ResourceState<T> {
@@ -170,6 +174,9 @@ class ResourceController<T> extends StateNotifier<ResourceState<T>> {
       state = ResData(
         Loaded(parse(entry.data), Freshness.cached, entry.fetchedAt),
         sessionExpired: sessionExpired,
+        staleReason: sessionExpired
+            ? 'Your UCAM session expired'
+            : (errorMessage ?? 'Couldn’t reach the portal'),
       );
     } else {
       state = ResError(errorMessage ??
